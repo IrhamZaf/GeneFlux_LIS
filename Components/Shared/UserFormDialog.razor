@@ -1,0 +1,243 @@
+@inject UserService UserService
+@inject ToastService ToastService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject CurrentUserService CurrentUserService
+
+<div class="modal fade show lis-modal-shell" tabindex="-1" aria-modal="true" role="dialog" @onclick="Cancel">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable lis-modal-dialog">
+        <div class="modal-content lis-modal-content app-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header border-bottom-0 pb-0">
+                <div>
+                    <h5 class="modal-title mb-1">
+                        <i class="icon-base ti tabler-user-cog me-2 text-primary"></i>@(IsEdit ? "Edit Account" : "Create Account")
+                    </h5>
+                    <p class="text-muted mb-0">Manage login access, role assignment, and hospital mapping.</p>
+                </div>
+                <button type="button" class="btn-close lis-modal-close" @onclick="Cancel" aria-label="Close"></button>
+            </div>
+            <div class="modal-body lis-modal-body">
+                <ul class="nav nav-tabs mb-4">
+                    <li class="nav-item">
+                        <button type="button"
+                                class='nav-link @(_activeTab == "details" ? "active" : null)'
+                                @onclick='() => _activeTab = "details"'>
+                            <i class="icon-base ti tabler-user me-1"></i>Account Details
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button type="button"
+                                class='nav-link @(_activeTab == "access" ? "active" : null)'
+                                @onclick='() => _activeTab = "access"'>
+                            <i class="icon-base ti tabler-lock-access me-1"></i>Access & Role
+                        </button>
+                    </li>
+                </ul>
+
+                @if (_activeTab == "details")
+                {
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input class="form-control" @bind="_fullName" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Email</label>
+                            <input class="form-control" @bind="_email" />
+                        </div>
+                        @if (!IsEdit)
+                        {
+                            <div class="col-12">
+                                <label class="form-label">Password</label>
+                                <input type="password" class="form-control" @bind="_password" />
+                            </div>
+                        }
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="user-active-toggle" @bind="_isActive" />
+                                <label class="form-check-label" for="user-active-toggle">Active account</label>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <label class="form-label d-block">Role</label>
+                        <div class="row g-2">
+                            @foreach (var role in _availableRoles)
+                            {
+                                <div class="col-md-6">
+                                    <button type="button"
+                                            class='btn w-100 text-start border @(role == _role ? "btn-primary" : "btn-label-secondary")'
+                                            @onclick="() => SelectRole(role)">
+                                        <div class="fw-semibold">@GetRoleLabel(role)</div>
+                                        <div class="small @(role == _role ? "text-white-50" : "text-muted")">@GetRoleDescription(role)</div>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="alert alert-primary-subtle border border-primary-subtle mb-3">
+                        <div class="fw-semibold mb-1">@GetRoleLabel(_role)</div>
+                        <div class="small text-muted">@GetRoleDescription(_role)</div>
+                    </div>
+
+                    @if (_role is UserRole.Doctor or UserRole.LabManager or UserRole.HeadNurse)
+                    {
+                        <div class="col-12">
+                            <label class="form-label">Hospital</label>
+                            <select class="form-select" @bind="_hospitalId">
+                                <option value="">Select hospital</option>
+                                @foreach (var h in Hospitals)
+                                {
+                                    <option value="@h.Id">@h.Name</option>
+                                }
+                            </select>
+                            <div class="form-text">This role is scoped to a hospital assignment.</div>
+                        </div>
+                    }
+                }
+            </div>
+            <div class="modal-footer border-top lis-modal-footer">
+                <button type="button" class="btn btn-label-secondary" @onclick="Cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="Submit">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<bool> OnClose { get; set; }
+    [Parameter] public UserRole? Role { get; set; }
+    [Parameter] public ApplicationUser? ExistingUser { get; set; }
+    [Parameter] public List<Hospital> Hospitals { get; set; } = new();
+
+    private bool IsEdit => ExistingUser != null;
+    private readonly UserRole[] _availableRoles =
+    [
+        UserRole.SuperAdmin,
+        UserRole.LabAdmin,
+        UserRole.Doctor,
+        UserRole.HeadNurse,
+        UserRole.LabManager
+    ];
+
+    private string _fullName = string.Empty;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private int? _hospitalId;
+    private UserRole _role = UserRole.LabAdmin;
+    private bool _isActive = true;
+    private string _activeTab = "details";
+
+    protected override void OnInitialized()
+    {
+        if (ExistingUser != null)
+        {
+            _fullName = ExistingUser.FullName;
+            _email = ExistingUser.Email ?? string.Empty;
+            _hospitalId = ExistingUser.HospitalId;
+            _role = ExistingUser.Role;
+            _isActive = ExistingUser.IsActive;
+        }
+        else if (Role.HasValue)
+        {
+            _role = Role.Value;
+        }
+    }
+
+    private async Task Cancel() => await OnClose.InvokeAsync(false);
+
+    private void SelectRole(UserRole role)
+    {
+        _role = role;
+
+        if (!RequiresHospital(role))
+            _hospitalId = null;
+    }
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_fullName) || string.IsNullOrWhiteSpace(_email))
+        {
+            ToastService.ShowToast("Please fill required fields.", ToastLevel.Warning);
+            return;
+        }
+
+        if (!IsEdit && string.IsNullOrWhiteSpace(_password))
+        {
+            ToastService.ShowToast("Password is required for new accounts.", ToastLevel.Warning);
+            return;
+        }
+
+        if (RequiresHospital(_role) && !_hospitalId.HasValue)
+        {
+            _activeTab = "access";
+            ToastService.ShowToast("Please choose a hospital for this role.", ToastLevel.Warning);
+            return;
+        }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var actor = await CurrentUserService.GetCurrentUserAsync(authState.User);
+
+        if (IsEdit && ExistingUser != null)
+        {
+            ExistingUser.FullName = _fullName;
+            ExistingUser.Email = _email;
+            ExistingUser.Role = _role;
+            ExistingUser.HospitalId = RequiresHospital(_role) ? _hospitalId : null;
+            ExistingUser.IsActive = _isActive;
+
+            var (success, errors) = await UserService.UpdateUserAsync(ExistingUser, actor);
+            if (!success)
+            {
+                foreach (var e in errors)
+                    ToastService.ShowToast(e, ToastLevel.Error);
+                return;
+            }
+        }
+        else
+        {
+            var user = new ApplicationUser
+            {
+                FullName = _fullName,
+                Email = _email,
+                Role = _role,
+                HospitalId = RequiresHospital(_role) ? _hospitalId : null,
+                IsActive = _isActive
+            };
+
+            var (success, errors) = await UserService.CreateUserAsync(user, _password, actor);
+            if (!success)
+            {
+                foreach (var e in errors)
+                    ToastService.ShowToast(e, ToastLevel.Error);
+                return;
+            }
+        }
+
+        await OnClose.InvokeAsync(true);
+    }
+
+    private static bool RequiresHospital(UserRole role) => role is UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager;
+
+    private static string GetRoleLabel(UserRole role) => role switch
+    {
+        UserRole.SuperAdmin => "Super Admin",
+        UserRole.LabAdmin => "Lab Admin",
+        UserRole.HeadNurse => "Head Nurse",
+        UserRole.LabManager => "Lab Manager",
+        _ => role.ToString()
+    };
+
+    private static string GetRoleDescription(UserRole role) => role switch
+    {
+        UserRole.SuperAdmin => "Global administration across all hospitals, users, and settings.",
+        UserRole.LabAdmin => "Operational control over reports and laboratory workflow.",
+        UserRole.Doctor => "Access to approved reports attributed to them within assigned hospitals.",
+        UserRole.HeadNurse => "Read-only visibility for reports in assigned hospitals.",
+        UserRole.LabManager => "Read-only monitoring across assigned hospital operations.",
+        _ => "Standard access."
+    };
+}

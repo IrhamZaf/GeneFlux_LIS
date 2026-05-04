@@ -1,0 +1,115 @@
+@* ! Brand demo (display only for navbar-full and hide on below xl) *@
+@if (ViewData["navbarFull"] != null)
+{
+  <div class="navbar-brand app-brand demo d-none d-xl-flex py-0 me-4 ms-0">
+    <a asp-controller="Home" asp-action="Index" class="app-brand-link">
+      <span class="app-brand-logo demo">
+        @await Html.PartialAsync("../_Partials/_Macros")
+      </span>
+      <span class="app-brand-text demo menu-text fw-bold">@TempData.Peek("appName")</span>
+    </a>
+
+    @* ! Display menu close icon only for horizontal-menu with navbar-full *@
+    @if (Convert.ToBoolean(@TempData.Peek("menuHorizontal")).ToString() == "True")
+    {
+      <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto d-xl-none">
+        <i class="icon-base ti tabler-x icon-sm d-flex align-items-center justify-content-center"></i>
+      </a>
+    }
+  </div>
+}
+
+@* ! Not required for layout-without-menu *@
+@if (ViewData["navbarHideToggle"] == null)
+{
+  <div class='layout-menu-toggle navbar-nav align-items-xl-center me-3 me-xl-0  @((Convert.ToBoolean(@TempData.Peek("menuHorizontal")).ToString() == "True") ? "d-xl-none" : "") @((@ViewData["contentNavbar"] != null && Convert.ToBoolean(@ViewData["contentNavbar"])) ? "" : "d-xl-none")'>
+    <a class="nav-item nav-link px-0 me-xl-6" href="javascript:void(0)">
+      <i class="icon-base ti tabler-menu-2 icon-md"></i>
+    </a>
+  </div>
+}
+
+<div class="navbar-nav-right d-flex align-items-center" id="navbar-collapse">
+
+  <!-- Style Switcher -->
+    <div class="navbar-nav align-items-center">
+      <div class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle hide-arrow btn btn-icon btn-text-secondary rounded-pill" id="nav-theme" href="javascript:void(0);" data-bs-toggle="dropdown">
+          <i class="icon-base ti tabler-sun icon-22px theme-icon-active text-heading"></i>
+          <span class="d-none ms-2" id="nav-theme-text">Toggle theme</span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-start" aria-labelledby="nav-theme-text">
+          <li>
+            <button type="button" class="dropdown-item align-items-center active" data-bs-theme-value="light" aria-pressed="false">
+              <span><i class="icon-base ti tabler-sun icon-22px me-3" data-icon="sun"></i>Light</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item align-items-center" data-bs-theme-value="dark" aria-pressed="true">
+              <span><i class="icon-base ti tabler-moon-stars icon-22px me-3" data-icon="moon-stars"></i>Dark</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="dropdown-item align-items-center" data-bs-theme-value="system" aria-pressed="false">
+              <span><i class="icon-base ti tabler-device-desktop-analytics icon-22px me-3" data-icon="device-desktop-analytics"></i>System</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  <!-- / Style Switcher-->
+
+  <ul class="navbar-nav flex-row align-items-center ms-auto">
+    <!-- User -->
+    <li class="nav-item navbar-dropdown dropdown-user dropdown">
+      <a class="nav-link dropdown-toggle hide-arrow p-0" href="javascript:void(0);" data-bs-toggle="dropdown">
+        <div class="avatar avatar-online">
+          <img src="~/img/avatars/1.png" alt class="rounded-circle" />
+        </div>
+      </a>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li>
+          <a class="dropdown-item mt-0" href="javascript:void(0);">
+            <div class="d-flex align-items-center">
+              <div class="flex-shrink-0 me-2">
+                <div class="avatar avatar-online">
+                  <img src="~/img/avatars/1.png" alt class="rounded-circle" />
+                </div>
+              </div>
+              <div class="flex-grow-1">
+                <h6 class="mb-0">John Doe</h6>
+                <small class="text-body-secondary">Admin</small>
+              </div>
+            </div>
+          </a>
+        </li>
+        <li>
+          <div class="dropdown-divider my-1 mx-n2"></div>
+        </li>
+        <li>
+          <a class="dropdown-item" href="javascript:void(0);"> <i class="icon-base ti tabler-user me-3 icon-md"></i><span class="align-middle">My Profile</span> </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="javascript:void(0);"> <i class="icon-base ti tabler-settings me-3 icon-md"></i><span class="align-middle">Settings</span> </a>
+        </li>
+        <li>
+          <a class="dropdown-item" href="javascript:void(0);">
+            <span class="d-flex align-items-center align-middle">
+              <i class="flex-shrink-0 icon-base ti tabler-file-dollar me-3 icon-md"></i><span class="flex-grow-1 align-middle">Billing</span>
+              <span class="flex-shrink-0 badge bg-danger d-flex align-items-center justify-content-center">4</span>
+            </span>
+          </a>
+        </li>
+        <li>
+          <div class="d-grid px-2 pt-2 pb-1">
+            <a class="btn btn-sm btn-danger d-flex" href="javascript:void(0);">
+              <small class="align-middle">Logout</small>
+              <i class="icon-base ti tabler-logout ms-2 icon-14px"></i>
+            </a>
+          </div>
+        </li>
+      </ul>
+    </li>
+    <!--/ User -->
+  </ul>
+</div>

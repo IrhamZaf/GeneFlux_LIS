@@ -1,0 +1,532 @@
+@page "/patients"
+@page "/patients/{Workflow}"
+@attribute [Authorize]
+@inject AuthenticationStateProvider AuthStateProvider
+@inject RoleAccessService RoleAccess
+@inject CurrentUserService CurrentUserService
+@inject AdministrationService AdministrationService
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@using LIS.Contracts.Administration
+@using LIS.Data
+@using LIS.Models
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>@PageTitleText - Geneflux LIS</PageTitle>
+
+@if (_loading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (!_canAccess)
+{
+    <div class="alert alert-warning mb-0">You do not have permission to access the patient directory.</div>
+}
+else if (!_hasWorkflowAccess)
+{
+    <div class="card workflow-guard-card border-warning">
+        <div class="card-body p-4">
+            <span class="badge bg-label-warning mb-3">Restricted Workflow</span>
+            <h4 class="mb-2">@PageTitleText is not part of your role flow</h4>
+            <p class="text-muted mb-3">@RoleAccess.GetWorkflowGuardMessage(_userRole, _workflowMode)</p>
+            <a href="@RoleAccess.GetPrimaryWorkspaceHref(_userRole)" class="btn btn-primary">
+                <i class="icon-base ti tabler-arrow-right me-1"></i>@RoleAccess.GetPrimaryWorkspaceLabel(_userRole)
+            </a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card patient-directory-card">
+        <div class="card-header border-bottom-0 pb-0">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+                <div>
+                    <h4 class="card-title mb-1">@PageTitleText</h4>
+                    <p class="text-muted mb-0 small">@PageSubtitle</p>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge bg-label-primary">@_scopeLabel</span>
+                    <span class="text-muted small">@FilteredPatients.Count entr@(FilteredPatients.Count == 1 ? "y" : "ies")</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body border-bottom pt-3 pb-3">
+            <div class="input-group input-group-merge app-search-input">
+                <span class="input-group-text"><i class="icon-base ti tabler-search"></i></span>
+                <input class="form-control"
+                       placeholder="@(_isDoctor ? "Search your patients..." : "Search patients, MRN, identity, hospital...")"
+                       @bind="_searchTerm"
+                       @bind:event="oninput" />
+            </div>
+        </div>
+        <div class="table-responsive border-top">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-uppercase small">Patient</th>
+                        <th class="text-uppercase small">Identity</th>
+                        <th class="text-uppercase small">MRN</th>
+                        <th class="text-uppercase small">Hospital</th>
+                        <th class="text-uppercase small">Doctor</th>
+                        <th class="text-uppercase small">Status</th>
+                        <th class="text-uppercase small text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (FilteredPatients.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <div class="empty-state-panel py-4">
+                                    <h6 class="mb-1">No patient records found</h6>
+                                    <p class="text-muted mb-0">Adjust the search terms or wait for completed reports to be submitted.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in FilteredPatients)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar avatar-sm me-3">
+                                            <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(item.PatientName)</span>
+                                        </div>
+                                        <span class="fw-semibold">@item.PatientName</span>
+                                    </div>
+                                </td>
+                                <td>@item.IdentityNumber</td>
+                                <td>@item.MRN</td>
+                                <td>@item.HospitalName</td>
+                                <td>@item.DoctorName</td>
+                                <td>
+                                    <span class='badge @(item.Status == ReportStatus.Approved ? "bg-label-success" : item.Status == ReportStatus.Archived ? "bg-label-secondary" : "bg-label-warning")'>
+                                        @(item.Status == ReportStatus.PendingReview ? "Pending Review" : item.Status.ToString())
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => ViewPatientDetailsAsync(item)">
+                                        <i class="icon-base ti tabler-eye me-1"></i>View
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (_showPatientDetailModal)
+{
+    <div class="modal fade show lis-modal-shell" tabindex="-1" aria-modal="true" role="dialog" @onclick="ClosePatientDetailModal">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl lis-modal-dialog">
+            <div class="modal-content lis-modal-content lis-patient-detail-modal" @onclick:stopPropagation="true">
+                <div class="modal-header align-items-start">
+                    <div class="d-flex flex-column flex-grow-1 gap-1 pe-2 min-w-0">
+                        @if (_patientDetailLoading)
+                        {
+                            <h5 class="modal-title mb-0 d-flex align-items-center gap-2">
+                                <i class="icon-base ti tabler-user text-primary"></i>Patient details
+                            </h5>
+                            <span class="text-muted small">Loading profile…</span>
+                        }
+                        else if (_patientDetail == null)
+                        {
+                            <h5 class="modal-title mb-0 d-flex align-items-center gap-2">
+                                <i class="icon-base ti tabler-user text-primary"></i>Patient details
+                            </h5>
+                        }
+                        else
+                        {
+                            <span class="patient-detail-kicker">Patient profile</span>
+                            <h5 class="patient-detail-hero-name mb-0 text-break">@_patientDetail.Name</h5>
+                            <div class="d-flex flex-wrap gap-2 align-items-center mt-1">
+                                <span class="badge bg-label-primary text-wrap text-start">@_patientDetailScopeHospitalName</span>
+                                @if (_patientDetail.Reports.Count > 0)
+                                {
+                                    <span class="text-muted small">@_patientDetail.Reports.Count linked report@(_patientDetail.Reports.Count == 1 ? "" : "s")</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <button type="button" class="btn-close lis-modal-close mt-0" @onclick="ClosePatientDetailModal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body lis-modal-body pt-3">
+                    @if (_patientDetailLoading)
+                    {
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    }
+                    else if (_patientDetail == null)
+                    {
+                        <div class="alert alert-warning mb-0">Patient not found or you do not have access.</div>
+                    }
+                    else
+                    {
+                        <div class="patient-detail-section mb-3">
+                            <div class="patient-detail-section-header">
+                                <div class="patient-detail-section-title">Demographics</div>
+                            </div>
+                            <div class="patient-detail-grid row g-3">
+                                <div class="col-sm-6 col-lg-4">
+                                    <div class="patient-detail-field-label">Sex</div>
+                                    <div class="patient-detail-field-value fw-medium">@_patientDetail.Sex</div>
+                                </div>
+                                <div class="col-sm-6 col-lg-4">
+                                    <div class="patient-detail-field-label">
+                                        @(_patientDetail.IdentityType == IdentityType.NRIC ? "NRIC" : "Passport")
+                                    </div>
+                                    <div class="patient-detail-field-value fw-medium font-monospace">
+                                        @(_patientDetail.IdentityType == IdentityType.NRIC
+                                            ? (_patientDetail.NRIC ?? "—")
+                                            : (_patientDetail.PassportNo ?? "—"))
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 col-lg-4">
+                                    <div class="patient-detail-field-label">MRN</div>
+                                    <div class="patient-detail-field-value fw-medium font-monospace">@(_patientDetail.MRN ?? "—")</div>
+                                </div>
+                                @if (_patientDetail.DateOfBirth.HasValue)
+                                {
+                                    <div class="col-sm-6 col-lg-4">
+                                        <div class="patient-detail-field-label">Date of birth</div>
+                                        <div class="patient-detail-field-value fw-medium">@_patientDetail.DateOfBirth.Value.ToString("dd/MM/yyyy")</div>
+                                    </div>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(_patientDetail.DoctorsSummary))
+                            {
+                                <div class="patient-detail-attending">
+                                    <div class="patient-detail-field-label">Attending doctor(s)</div>
+                                    <div class="patient-detail-field-value fw-semibold">@_patientDetail.DoctorsSummary</div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="patient-detail-section">
+                            <div class="patient-detail-section-header">
+                                <div class="patient-detail-section-title">Report history</div>
+                                <span class="text-muted small fw-normal text-uppercase patient-detail-hospital-eyebrow">@_patientDetailScopeHospitalName</span>
+                            </div>
+                            @if (_patientDetail.Reports.Count == 0)
+                            {
+                                <div class="p-4 text-center text-muted small">No reports in your scope for this hospital.</div>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table patient-detail-report-table mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Reference</th>
+                                                <th>Doctor</th>
+                                                <th>Test</th>
+                                                <th>Reporting date</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var r in PagedModalReports)
+                                            {
+                                                <tr>
+                                                    <td class="fw-semibold text-nowrap">@r.ReferenceNumber</td>
+                                                    <td>@(string.IsNullOrWhiteSpace(r.DoctorName) ? "—" : r.DoctorName)</td>
+                                                    <td class="text-break patient-detail-test-cell">@r.TestName</td>
+                                                    <td class="text-nowrap text-muted small">
+                                                        @(r.ReportingDate.HasValue
+                                                            ? r.ReportingDate.Value.ToString("dd/MM/yyyy HH:mm")
+                                                            : r.UpdatedAt.ToString("dd/MM/yyyy"))
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge @StatusBadgeClass(r.Status)">@GetReportStatusLabel(r.Status)</span>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                @if (ModalReportTotalPages > 1)
+                                {
+                                    <div class="lis-table-pagination border-top px-3 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <span class="text-muted small mb-0 align-self-center">@ModalReportRangeLabel</span>
+                                        <nav aria-label="Reports pagination" class="flex-shrink-0">
+                                            <ul class="pagination pagination-sm mb-0 align-items-center">
+                                                <li class="page-item @(_modalReportPage <= 1 ? "disabled" : "")">
+                                                    <button type="button" class="page-link" disabled="@(_modalReportPage <= 1)" @onclick="ModalReportPrevPage">Prev</button>
+                                                </li>
+                                                <li class="page-item disabled"><span class="page-link">@_modalReportPage / @ModalReportTotalPages</span></li>
+                                                <li class="page-item @(_modalReportPage >= ModalReportTotalPages ? "disabled" : "")">
+                                                    <button type="button" class="page-link" disabled="@(_modalReportPage >= ModalReportTotalPages)" @onclick="ModalReportNextPage">Next</button>
+                                                </li>
+                                            </ul>
+                                        </nav>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="modal-footer border-top lis-modal-footer">
+                    <button type="button" class="btn btn-label-secondary" @onclick="ClosePatientDetailModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Workflow { get; set; }
+
+    private const int ModalReportPageSize = 10;
+
+    private bool _loading = true;
+    private bool _canAccess;
+    private bool _hasWorkflowAccess = true;
+    private bool _isDoctor;
+    private string _scopeLabel = string.Empty;
+    private string _searchTerm = string.Empty;
+    private List<PatientDirectoryRow> _patients = new();
+    private List<int> _accessibleHospitalIds = new();
+    private UserRole _userRole;
+    private bool _initialized;
+    private ApplicationUser? _directoryViewer;
+
+    private bool _showPatientDetailModal;
+    private bool _patientDetailLoading;
+    private PatientDetailDto? _patientDetail;
+    private string _patientDetailScopeHospitalName = string.Empty;
+    private int _modalReportPage = 1;
+
+    private string _workflowMode => (Workflow ?? "directory").ToLowerInvariant();
+
+    private IEnumerable<PatientReportDto> PagedModalReports =>
+        _patientDetail?.Reports.Skip((_modalReportPage - 1) * ModalReportPageSize).Take(ModalReportPageSize)
+        ?? Enumerable.Empty<PatientReportDto>();
+
+    private int ModalReportTotalPages =>
+        _patientDetail == null || _patientDetail.Reports.Count == 0
+            ? 0
+            : (int)Math.Ceiling(_patientDetail.Reports.Count / (double)ModalReportPageSize);
+
+    private string ModalReportRangeLabel =>
+        _patientDetail == null || _patientDetail.Reports.Count == 0
+            ? "No reports"
+            : $"Showing {Math.Min((_modalReportPage - 1) * ModalReportPageSize + 1, _patientDetail.Reports.Count)}–{Math.Min(_modalReportPage * ModalReportPageSize, _patientDetail.Reports.Count)} of {_patientDetail.Reports.Count}";
+
+    private string PageTitleText => _workflowMode switch
+    {
+        "search" => "Search Patient",
+        "view" => "View Patient Data",
+        "download" => "Download Report",
+        _ => "Patient Directory"
+    };
+
+    private string PageSubtitle => _workflowMode switch
+    {
+        "search" => _isDoctor ? "Search and select assigned patients only." : "Search and select hospital patients.",
+        "view" => "View patient profile, report history, and test results.",
+        "download" => "Download or print completed patient reports.",
+        _ => "Search patient records and open details for patients linked to reports in your scope."
+    };
+
+    private List<PatientDirectoryRow> FilteredPatients =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _patients
+            : _patients.Where(x =>
+                x.PatientName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.IdentityNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.MRN.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.HospitalName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.DoctorName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.ReferenceNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var username = authState.User.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            _loading = false;
+            return;
+        }
+
+        var user = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        if (user == null)
+        {
+            _loading = false;
+            return;
+        }
+
+        _directoryViewer = user;
+        _canAccess = RoleAccess.CanAccessPatientDirectory(user.Role);
+        _userRole = user.Role;
+        _hasWorkflowAccess = RoleAccess.CanAccessPatientWorkflow(user.Role, _workflowMode);
+        _isDoctor = user.Role == UserRole.Doctor;
+        _accessibleHospitalIds = CurrentUserService.GetAccessibleHospitalIds(user).ToList();
+        _scopeLabel = _isDoctor
+            ? "Patients from reports attributed to you"
+            : _accessibleHospitalIds.Count > 1 ? "Assigned hospitals" : "Hospital patients";
+
+        await LoadPatientsAsync(user);
+
+        _loading = false;
+        _initialized = true;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized)
+            return;
+
+        _hasWorkflowAccess = RoleAccess.CanAccessPatientWorkflow(_userRole, _workflowMode);
+        if (!_canAccess || !_hasWorkflowAccess)
+        {
+            _patients.Clear();
+            return;
+        }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        if (user != null)
+        {
+            _directoryViewer = user;
+            await LoadPatientsAsync(user);
+        }
+    }
+
+    private static string GetInitials(string value)
+    {
+        var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(value) ? "P" : value[..1].ToUpperInvariant();
+    }
+
+    private async Task LoadPatientsAsync(ApplicationUser user)
+    {
+        _patients.Clear();
+        if (!_canAccess || !_hasWorkflowAccess)
+            return;
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var query = context.Reports
+            .Include(r => r.Patient)
+            .Include(r => r.Hospital)
+            .Include(r => r.Doctor)
+            .AsQueryable();
+
+        if (_accessibleHospitalIds.Count > 0)
+            query = query.Where(r => _accessibleHospitalIds.Contains(r.HospitalId));
+
+        if (user.Role == UserRole.Doctor)
+        {
+            var email = user.Email?.Trim();
+            query = query.Where(r =>
+                r.Status == ReportStatus.Approved &&
+                (
+                    (user.DoctorId.HasValue && r.DoctorId == user.DoctorId.Value) ||
+                    (!string.IsNullOrWhiteSpace(email) &&
+                     r.Doctor.Email != null &&
+                     r.Doctor.Email.Trim().ToLower() == email.ToLower()) ||
+                    r.CreatedByUserId == user.Id));
+        }
+        else if (user.Role is UserRole.HeadNurse or UserRole.LabManager or UserRole.LabAdmin)
+        {
+            query = query.Where(r => r.Status == ReportStatus.Approved);
+        }
+
+        _patients = await query
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new PatientDirectoryRow
+            {
+                PatientId = r.PatientId,
+                HospitalId = r.HospitalId,
+                PatientName = r.Patient.Name,
+                IdentityNumber = r.Patient.IdentityType == IdentityType.NRIC
+                    ? (r.Patient.NRIC ?? "-")
+                    : (r.Patient.PassportNo ?? "-"),
+                MRN = r.Patient.MRN ?? "-",
+                HospitalName = r.Hospital.Name,
+                DoctorName = r.Doctor.Name,
+                ReferenceNumber = r.ReferenceNumber,
+                Status = r.Status
+            })
+            .ToListAsync();
+    }
+
+    private async Task ViewPatientDetailsAsync(PatientDirectoryRow item)
+    {
+        if (_directoryViewer == null)
+            return;
+
+        _patientDetailScopeHospitalName = item.HospitalName;
+        _showPatientDetailModal = true;
+        _patientDetail = null;
+        _patientDetailLoading = true;
+        _modalReportPage = 1;
+        StateHasChanged();
+
+        _patientDetail = await AdministrationService.GetPatientDetailForViewerAsync(
+            item.PatientId,
+            item.HospitalId,
+            _directoryViewer);
+
+        _patientDetailLoading = false;
+        StateHasChanged();
+    }
+
+    private void ClosePatientDetailModal()
+    {
+        _showPatientDetailModal = false;
+        _patientDetail = null;
+        _modalReportPage = 1;
+    }
+
+    private void ModalReportPrevPage()
+    {
+        if (_modalReportPage > 1) _modalReportPage--;
+    }
+
+    private void ModalReportNextPage()
+    {
+        if (_modalReportPage < ModalReportTotalPages) _modalReportPage++;
+    }
+
+    private static string StatusBadgeClass(ReportStatus status) => status switch
+    {
+        ReportStatus.Draft => "bg-label-secondary",
+        ReportStatus.PendingReview => "bg-label-warning",
+        ReportStatus.Approved => "bg-label-success",
+        ReportStatus.Archived => "bg-label-dark",
+        _ => "bg-label-secondary"
+    };
+
+    private static string GetReportStatusLabel(ReportStatus status) => status switch
+    {
+        ReportStatus.PendingReview => "Pending review",
+        _ => status.ToString()
+    };
+
+    private sealed class PatientDirectoryRow
+    {
+        public int PatientId { get; set; }
+        public int HospitalId { get; set; }
+        public string PatientName { get; set; } = string.Empty;
+        public string IdentityNumber { get; set; } = string.Empty;
+        public string MRN { get; set; } = "-";
+        public string HospitalName { get; set; } = string.Empty;
+        public string DoctorName { get; set; } = string.Empty;
+        public string ReferenceNumber { get; set; } = string.Empty;
+        public ReportStatus Status { get; set; }
+    }
+}

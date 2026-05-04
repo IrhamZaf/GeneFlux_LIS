@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en"
+      class="light-style customizer-hide"
+      dir="ltr"
+      data-skin="default"
+      data-bs-theme="light"
+      data-assets-path="/"
+      data-template="vertical-menu-template">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"] | Geneflux LIS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+    <meta content="Geneflux LIS" name="description" />
+    <meta content="Geneflux" name="author" />
+    <link rel="icon" type="image/x-icon" href="~/img/favicon/favicon.ico" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/vendor/fonts/iconify-icons.dist.css" />
+    <link rel="stylesheet" href="~/vendor/libs/node-waves/node-waves.dist.css" />
+    <link rel="stylesheet" href="~/vendor/libs/perfect-scrollbar/perfect-scrollbar.dist.css" />
+    <link rel="stylesheet" href="~/vendor/libs/pickr/pickr-themes.dist.css" />
+    <link rel="stylesheet" href="~/vendor/css/core.dist.css" />
+    <link rel="stylesheet" href="~/vendor/css/pages/page-auth.dist.css" />
+    <link rel="stylesheet" href="~/css/demo.css" />
+    <link rel="stylesheet" href="~/css/site.dist.css" />
+    <link rel="stylesheet" href="~/css/app.css" />
+
+    <script src="~/vendor/js/helpers.dist.js"></script>
+    <script src="~/vendor/js/template-customizer.dist.js"></script>
+    <script src="~/js/config.dist.js"></script>
+</head>
+<body>
+    <div class="authentication-wrapper authentication-cover lis-auth-wrapper">
+        <a href="/" class="app-brand auth-cover-brand gap-2">
+            <span class="app-brand-logo demo">
+                <img src="~/img/Geneflux_logo3.png" alt="Geneflux Logo" style="height: 48px;" />
+            </span>
+        </a>
+
+        <div class="authentication-inner row m-0">
+            <div class="d-none d-lg-flex col-lg-7 col-xl-8 align-items-center justify-content-center p-5 lis-auth-hero">
+                <div class="lis-auth-hero-content text-center">
+                    <span class="badge rounded-pill bg-label-success mb-4">Laboratory Platform</span>
+                    <h2 class="mb-3">Secure diagnostics workflow for your team</h2>
+                    <p class="text-muted mb-0">Manage reports, staff access, and patient results from one place with the Vuexy-based LIS dashboard.</p>
+
+                    <div class="lis-auth-flow-card text-start mt-4">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+                            <div>
+                                <h5 class="mb-1">Access Flow</h5>
+                                <p class="text-muted mb-0 small">Sign in, validate credentials, then route users into their approved role path.</p>
+                            </div>
+                            <span class="badge bg-label-primary">Role Aware</span>
+                        </div>
+
+                        <div class="workflow-step-grid auth-workflow-steps">
+                            <div class="workflow-step-item is-complete">
+                                <span class="workflow-step-number">1</span>
+                                <div>
+                                    <h6 class="mb-1">Login</h6>
+                                    <p class="text-muted small mb-0">Enter username and password.</p>
+                                </div>
+                            </div>
+                            <div class="workflow-step-item is-complete">
+                                <span class="workflow-step-number">2</span>
+                                <div>
+                                    <h6 class="mb-1">Validate</h6>
+                                    <p class="text-muted small mb-0">Invalid attempts stay on this page.</p>
+                                </div>
+                            </div>
+                            <div class="workflow-step-item is-active">
+                                <span class="workflow-step-number">3</span>
+                                <div>
+                                    <h6 class="mb-1">Route by Role</h6>
+                                    <p class="text-muted small mb-0">Operational and hospital teams see different workflows.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lis-auth-role-pills mt-3">
+                            <span class="badge bg-label-primary">Super Admin</span>
+                            <span class="badge bg-label-info">Lab Admin</span>
+                            <span class="badge bg-label-success">Doctors</span>
+                            <span class="badge bg-label-info">Head Nurses</span>
+                            <span class="badge bg-label-danger">Lab Managers</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex col-12 col-lg-5 col-xl-4 align-items-center justify-content-center authentication-bg lis-auth-panel">
+                <div class="lis-auth-card-wrap">
+                    @RenderBody()
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/vendor/libs/jquery/jquery.dist.js"></script>
+    <script src="~/vendor/libs/popper/popper.dist.js"></script>
+    <script src="~/vendor/js/bootstrap.dist.js"></script>
+    <script src="~/vendor/libs/node-waves/node-waves.dist.js"></script>
+    <script src="~/vendor/libs/@@algolia/autocomplete-js.dist.js"></script>
+    <script src="~/vendor/libs/pickr/pickr.dist.js"></script>
+    <script src="~/vendor/libs/perfect-scrollbar/perfect-scrollbar.dist.js"></script>
+    <script src="~/vendor/libs/hammer/hammer.dist.js"></script>
+    <script src="~/vendor/libs/i18n/i18n.dist.js"></script>
+    <script src="~/vendor/js/menu.dist.js"></script>
+    <script src="~/js/site.dist.js"></script>
+    <script src="~/js/main.dist.js"></script>
+    <script src="~/js/pages-auth.dist.js"></script>
+    <script src="~/js/app.js?v=5"></script>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

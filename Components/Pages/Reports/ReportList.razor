@@ -1,0 +1,709 @@
+@page "/reports"
+@attribute [Authorize]
+@inject ReportService ReportService
+@inject DropdownService DropdownService
+@inject ToastService ToastService
+@inject PdfExportService PdfService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@using LIS.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject RoleAccessService RoleAccess
+@inject CurrentUserService CurrentUserService
+
+<PageTitle>Reports - Geneflux LIS</PageTitle>
+
+@if (_loading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <div class="spinner-border text-success" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (_currentUser == null || !RoleAccess.CanAccessReports(_currentUser.Role))
+{
+    <div class="card workflow-guard-card border-warning">
+        <div class="card-body p-4">
+            <span class="badge bg-label-warning mb-3">Restricted Workspace</span>
+            <h4 class="mb-2">Reports is not available for your role</h4>
+            <p class="text-muted mb-3">Only approved roles can access the unified report workspace.</p>
+            <a href="/" class="btn btn-primary">
+                <i class="icon-base ti tabler-arrow-right me-1"></i>Back to dashboard
+            </a>
+        </div>
+    </div>
+}
+else
+{
+    @if (_showFilter)
+    {
+        <div class="@(_showDialog ? "pe-none user-select-none opacity-50" : null)">
+            <FilterPanel Filter="_filter"
+                         OnApply="ApplyFilters"
+                         OnReset="ResetFilters"
+                         ShowHospital="_showHospitalFilter"
+                         ShowDoctor="_showDoctorFilter"
+                         Tests="_tests" />
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-header border-0">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <h4 class="card-title mb-1">Reports</h4>
+                    <p class="text-muted mb-0 small">@GetStatusDescriptionForActiveTab()</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    @if (_canCreateReports)
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="OpenCreateDialog" disabled="@_showDialog">
+                            <i class="icon-base ti tabler-upload me-1"></i>Upload Report
+                        </button>
+                    }
+                    @if (_tableLoading)
+                    {
+                        <span class="badge bg-label-warning">Loading...</span>
+                    }
+                </div>
+            </div>
+            @if (!_isDoctor)
+            {
+                <div class="mt-3 border-top pt-3">
+                    <ul class="nav nav-pills flex-wrap gap-2">
+                        <li class="nav-item">
+                            <button type="button"
+                                    class='nav-link @(_activeStatus == null ? "active" : "")'
+                                    disabled="@_showDialog"
+                                    @onclick="SelectAllStatuses">
+                                All
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetAllStatusesCount()</span>
+                            </button>
+                        </li>
+                        @foreach (var status in _statusTabs)
+                        {
+                            <li class="nav-item">
+                                <button type="button"
+                                        class='nav-link @(_activeStatus == status ? "active" : "")'
+                                        disabled="@_showDialog"
+                                        @onclick="() => ChangeStatus(status)">
+                                    @GetStatusLabel(status)
+                                    <span class="badge rounded-pill bg-white text-dark ms-2">@GetStatusCount(status)</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+        <div class="card-datatable table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-uppercase small fw-bold">Ref No.</th>
+                        <th class="text-uppercase small fw-bold">Patient</th>
+                        <th class="text-uppercase small fw-bold">Identity</th>
+                        <th class="text-uppercase small fw-bold">MRN</th>
+                        <th class="text-uppercase small fw-bold">Hospital</th>
+                        <th class="text-uppercase small fw-bold">Doctor</th>
+                        <th class="text-uppercase small fw-bold">Test</th>
+                        <th class="text-uppercase small fw-bold">Status</th>
+                        <th class="text-uppercase small fw-bold">Updated</th>
+                        <th class="text-end text-uppercase small fw-bold">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_reports.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center py-4 text-muted">
+                                No reports found for @GetActiveFilterLabel(). Try adjusting your filters.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var report in _reports)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@report.ReferenceNumber</td>
+                                <td>@report.Patient?.Name</td>
+                                <td>@report.Patient?.IdentityNumber</td>
+                                <td>@report.Patient?.MRN</td>
+                                <td>@report.Hospital?.Name</td>
+                                <td>@report.Doctor?.Name</td>
+                                <td>@report.Test?.Name</td>
+                                <td><span class="badge @GetStatusBadge(report.Status)">@GetStatusLabel(report.Status)</span></td>
+                                <td>@report.UpdatedAt.ToString("dd/MM/yyyy")</td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-2 px-2">
+                                        @foreach (var action in GetActions(report))
+                                        {
+                                            <button type="button"
+                                                    class="btn btn-sm btn-icon @action.CssClass"
+                                                    title="@action.Title"
+                                                    disabled="@_showDialog"
+                                                    @onclick="action.Handler">
+                                                <i class="@action.Icon"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer border-top d-flex flex-wrap justify-content-between align-items-center py-2 px-4">
+            <div class="text-muted small">
+                @if (_totalCount == 0)
+                {
+                    <span>Showing 0 entries</span>
+                }
+                else
+                {
+                    <span>Showing @((_filter.Page - 1) * _filter.PageSize + 1) to @Math.Min(_filter.Page * _filter.PageSize, _totalCount) of @_totalCount entries</span>
+                }
+            </div>
+            <nav aria-label="Page navigation">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class='page-item @(_filter.Page == 1 || _showDialog ? "disabled" : "")'>
+                        <button class="page-link" disabled="@_showDialog" @onclick="() => ChangePage(_filter.Page - 1)"><i class="ti tabler-chevron-left"></i></button>
+                    </li>
+                    @for (var i = 1; i <= TotalPages; i++)
+                    {
+                        var pageNum = i;
+                        <li class='page-item @(_filter.Page == pageNum ? "active" : "")'>
+                            <button class="page-link" disabled="@_showDialog" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                        </li>
+                    }
+                    <li class='page-item @(_filter.Page == TotalPages || TotalPages == 0 || _showDialog ? "disabled" : "")'>
+                        <button class="page-link" disabled="@_showDialog" @onclick="() => ChangePage(_filter.Page + 1)"><i class="ti tabler-chevron-right"></i></button>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+
+    @if (_showDialog)
+    {
+        <UploadReportDialog @key="_uploadReportDialogKey"
+                            ExistingReport="@_selectedReport"
+                            CurrentUser="@_currentUser"
+                            ReadOnly="@_dialogReadOnly"
+                            CanApprove="@(_currentUser != null && RoleAccess.CanApproveReports(_currentUser.Role))"
+                            CanReject="@(_currentUser != null && RoleAccess.CanRejectReports(_currentUser.Role))"
+                            OnApprove="HandleApproveFromDialog"
+                            OnReject="HandleRejectFromDialog"
+                            OnClose="HandleDialogClose" />
+    }
+
+    @if (_showDeleteDialog && _selectedReport != null)
+    {
+        <DeleteConfirmDialog Title="Delete Report"
+                             Message="This draft report and its associated test results will be permanently removed."
+                             ItemLabel="Reference"
+                             ReferenceNumber="@_selectedReport.ReferenceNumber"
+                             ConfirmText="Delete"
+                             OnClose="HandleDeleteConfirm" />
+    }
+}
+
+@code {
+    private readonly ReportStatus[] _statusTabs =
+    [
+        ReportStatus.Draft,
+        ReportStatus.PendingReview,
+        ReportStatus.Approved,
+        ReportStatus.Archived
+    ];
+
+    private List<Report> _reports = new();
+    private List<Test> _tests = new();
+    private Dictionary<ReportStatus, int> _statusCounts = new();
+    private ReportFilter _filter = new();
+    private int _totalCount;
+
+    private bool _loading = true;
+    private bool _tableLoading;
+    private bool _showFilter = true;
+    private bool _showDialog;
+    private bool _dialogReadOnly;
+    private bool _showDeleteDialog;
+    private CancellationTokenSource? _searchDebounce;
+
+    private Guid _uploadReportDialogKey;
+    private Report? _selectedReport;
+    private ApplicationUser? _currentUser;
+    private bool _isDoctor;
+    /// <summary>Null means "All" statuses tab is selected.</summary>
+    private ReportStatus? _activeStatus = ReportStatus.Draft;
+
+    private bool _canCreateReports => _currentUser != null && RoleAccess.CanCreateReports(_currentUser.Role);
+    private bool _showHospitalFilter => _currentUser?.Role is UserRole.SuperAdmin or UserRole.LabAdmin;
+    private bool _showDoctorFilter => _currentUser?.Role is not UserRole.Doctor;
+    private int TotalPages => (int)Math.Ceiling((double)_totalCount / _filter.PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated != true)
+        {
+            _loading = false;
+            return;
+        }
+
+        _currentUser = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        if (_currentUser == null)
+        {
+            _loading = false;
+            return;
+        }
+
+        _filter.UserRole = _currentUser.Role;
+        _filter.UserId = _currentUser.Id;
+        _filter.UserEmail = _currentUser.Email;
+        _filter.DoctorId = _currentUser.DoctorId;
+        _filter.HospitalId = _currentUser.HospitalId;
+        _filter.AccessibleHospitalIds = CurrentUserService.GetAccessibleHospitalIds(_currentUser).ToList();
+        _isDoctor = _currentUser.Role == UserRole.Doctor;
+        if (_isDoctor)
+        {
+            _activeStatus = ReportStatus.Approved;
+            _filter.Status = ReportStatus.Approved;
+        }
+        else
+        {
+            _activeStatus = null;
+            _filter.Status = null;
+        }
+
+        _tests = await DropdownService.GetTestsAsync();
+
+        await RefreshData();
+        _loading = false;
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadReports();
+        await LoadStatusCounts();
+    }
+
+    private async Task LoadReports()
+    {
+        _tableLoading = true;
+        StateHasChanged();
+
+        var (reports, totalCount) = await ReportService.GetReportsAsync(_filter);
+        _reports = reports;
+        _totalCount = totalCount;
+
+        _tableLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadStatusCounts()
+    {
+        _statusCounts = await ReportService.GetStatusCountsAsync(new ReportFilter
+        {
+            UserRole = _filter.UserRole,
+            UserId = _filter.UserId,
+            UserEmail = _filter.UserEmail,
+            DoctorId = _filter.DoctorId,
+            HospitalId = _filter.HospitalId,
+            AccessibleHospitalIds = _filter.AccessibleHospitalIds.ToList(),
+            FilterHospitalId = _filter.FilterHospitalId,
+            FilterDoctorId = _filter.FilterDoctorId,
+            HospitalSearch = _filter.HospitalSearch,
+            DoctorSearch = _filter.DoctorSearch,
+            PatientName = _filter.PatientName,
+            NRIC = _filter.NRIC,
+            MRN = _filter.MRN,
+            FilterTestId = _filter.FilterTestId,
+            DateFrom = _filter.DateFrom,
+            DateTo = _filter.DateTo,
+            SearchTerm = _filter.SearchTerm
+        });
+    }
+
+    private async Task ApplyFilters()
+    {
+        _filter.Page = 1;
+        await RefreshData();
+    }
+
+    private async Task ResetFilters()
+    {
+        _filter.Page = 1;
+        await RefreshData();
+    }
+
+    private async Task SelectAllStatuses()
+    {
+        _activeStatus = null;
+        _filter.Status = null;
+        _filter.Page = 1;
+        await LoadReports();
+    }
+
+    private async Task ChangeStatus(ReportStatus status)
+    {
+        _activeStatus = status;
+        _filter.Status = status;
+        _filter.Page = 1;
+        await LoadReports();
+    }
+
+    private int GetStatusCount(ReportStatus status)
+    {
+        return _statusCounts.TryGetValue(status, out var count) ? count : 0;
+    }
+
+    private int GetAllStatusesCount() => _statusCounts.Values.Sum();
+
+    private string GetActiveFilterLabel() =>
+        _isDoctor
+            ? "approved reports"
+            : _activeStatus == null ? "all statuses" : GetStatusLabel(_activeStatus.Value);
+
+    private string GetStatusDescriptionForActiveTab() =>
+        _isDoctor
+            ? GetStatusDescription(ReportStatus.Approved)
+            : _activeStatus == null
+                ? "All reports in your scope, every status."
+                : GetStatusDescription(_activeStatus.Value);
+
+    private async Task ChangePage(int page)
+    {
+        if (page < 1 || page > TotalPages)
+            return;
+
+        _filter.Page = page;
+        await LoadReports();
+    }
+
+    private async Task HandleSearchInput(ChangeEventArgs e)
+    {
+        _filter.SearchTerm = e.Value?.ToString();
+        _filter.Page = 1;
+
+        _searchDebounce?.Cancel();
+        _searchDebounce = new CancellationTokenSource();
+        var token = _searchDebounce.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            if (!token.IsCancellationRequested)
+                await RefreshData();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _searchDebounce?.Cancel();
+        _filter.SearchTerm = null;
+        _filter.Page = 1;
+        await RefreshData();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _uploadReportDialogKey = Guid.NewGuid();
+        _selectedReport = null;
+        _dialogReadOnly = false;
+        _showDialog = true;
+    }
+
+    private async Task OpenDialog(Report report, bool readOnly)
+    {
+        if (_currentUser == null)
+            return;
+
+        _uploadReportDialogKey = Guid.NewGuid();
+        _selectedReport = await ReportService.GetByIdAsync(report.Id, _currentUser);
+        _dialogReadOnly = readOnly;
+        _showDialog = _selectedReport != null;
+    }
+
+    private IReadOnlyList<ReportActionButton> GetActions(Report report)
+    {
+        var actions = new List<ReportActionButton>();
+        if (_currentUser == null)
+            return actions;
+
+        switch (report.Status)
+        {
+            case ReportStatus.Draft:
+                if (RoleAccess.CanEditDraftReports(_currentUser.Role))
+                {
+                    actions.Add(new("Edit report", "btn-label-primary", "icon-base ti tabler-edit", () => OpenDialog(report, false)));
+                    if (RoleAccess.CanDeleteDraftReports(_currentUser.Role))
+                    {
+                        actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
+                        {
+                            _selectedReport = report;
+                            _showDeleteDialog = true;
+                            return Task.CompletedTask;
+                        }));
+                    }
+
+                    actions.Add(new("Submit for review", "btn-label-success", "icon-base ti tabler-send", () => SubmitReport(report)));
+                }
+                else
+                {
+                    actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
+                }
+                break;
+
+            case ReportStatus.PendingReview:
+                actions.Add(new("Review report", "btn-label-secondary", "icon-base ti tabler-eye-check", () => OpenDialog(report, true)));
+                if (_currentUser.Role == UserRole.SuperAdmin)
+                    actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
+                    {
+                        _selectedReport = report;
+                        _showDeleteDialog = true;
+                        return Task.CompletedTask;
+                    }));
+                break;
+
+            case ReportStatus.Approved:
+                actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
+                if (RoleAccess.CanDownloadReports(_currentUser.Role))
+                    actions.Add(new("Download PDF", "btn-label-success", "icon-base ti tabler-file-type-pdf", () => DownloadPdf(report)));
+                if (RoleAccess.CanArchiveReports(_currentUser.Role))
+                    actions.Add(new("Archive report", "btn-label-dark", "icon-base ti tabler-archive", () => ArchiveReport(report)));
+                if (_currentUser.Role == UserRole.SuperAdmin)
+                    actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
+                    {
+                        _selectedReport = report;
+                        _showDeleteDialog = true;
+                        return Task.CompletedTask;
+                    }));
+                break;
+
+            case ReportStatus.Archived:
+                actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
+                if (_currentUser.Role == UserRole.SuperAdmin)
+                    actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
+                    {
+                        _selectedReport = report;
+                        _showDeleteDialog = true;
+                        return Task.CompletedTask;
+                    }));
+                break;
+        }
+
+        return actions;
+    }
+
+    private async Task HandleDialogClose(bool _)
+    {
+        _showDialog = false;
+        _dialogReadOnly = false;
+        _selectedReport = null;
+        await RefreshData();
+    }
+
+    private async Task HandleApproveFromDialog(int reportId)
+    {
+        if (_currentUser == null) return;
+        try
+        {
+            var approved = await ReportService.ApproveAsync(reportId, _currentUser);
+            if (approved == null)
+                ToastService.ShowToast("Unable to approve this report.", ToastLevel.Warning);
+            else
+                ToastService.ShowToast("Report approved.", ToastLevel.Success);
+        }
+        catch (Exception ex) { ToastService.ShowToast(ex.Message, ToastLevel.Error); }
+        _showDialog = false;
+        _selectedReport = null;
+        await RefreshData();
+    }
+
+    private async Task HandleRejectFromDialog(int reportId)
+    {
+        if (_currentUser == null) return;
+        try
+        {
+            var rejected = await ReportService.RejectAsync(reportId, _currentUser);
+            if (rejected == null)
+                ToastService.ShowToast("Unable to reject this report.", ToastLevel.Warning);
+            else
+                ToastService.ShowToast("Report returned to draft.", ToastLevel.Success);
+        }
+        catch (Exception ex) { ToastService.ShowToast(ex.Message, ToastLevel.Error); }
+        _showDialog = false;
+        _selectedReport = null;
+        await RefreshData();
+    }
+
+    private async Task HandleDeleteConfirm(bool confirmed)
+    {
+        _showDeleteDialog = false;
+        if (confirmed && _selectedReport != null && _currentUser != null)
+        {
+            if (await ReportService.DeleteAsync(_selectedReport.Id, _currentUser))
+            {
+                ToastService.ShowToast("Report deleted.", ToastLevel.Success);
+                await RefreshData();
+            }
+            else
+            {
+                ToastService.ShowToast("Unable to delete report.", ToastLevel.Warning);
+            }
+        }
+
+        _selectedReport = null;
+    }
+
+    private async Task SubmitReport(Report report)
+    {
+        if (_currentUser == null)
+            return;
+
+        try
+        {
+            var submitted = await ReportService.SubmitForReviewAsync(report.Id, _currentUser);
+            if (submitted == null)
+            {
+                ToastService.ShowToast("Unable to submit this report.", ToastLevel.Warning);
+                return;
+            }
+
+            ToastService.ShowToast("Report moved to Pending Review.", ToastLevel.Success);
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(ex.Message, ToastLevel.Error);
+        }
+    }
+
+    private async Task ApproveReport(Report report)
+    {
+        if (_currentUser == null)
+            return;
+
+        try
+        {
+            var approved = await ReportService.ApproveAsync(report.Id, _currentUser);
+            if (approved == null)
+            {
+                ToastService.ShowToast("Unable to approve this report.", ToastLevel.Warning);
+                return;
+            }
+
+            ToastService.ShowToast("Report approved.", ToastLevel.Success);
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(ex.Message, ToastLevel.Error);
+        }
+    }
+
+    private async Task RejectReport(Report report)
+    {
+        if (_currentUser == null)
+            return;
+
+        try
+        {
+            var rejected = await ReportService.RejectAsync(report.Id, _currentUser);
+            if (rejected == null)
+            {
+                ToastService.ShowToast("Unable to reject this report.", ToastLevel.Warning);
+                return;
+            }
+
+            ToastService.ShowToast("Report returned to Draft.", ToastLevel.Success);
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(ex.Message, ToastLevel.Error);
+        }
+    }
+
+    private async Task ArchiveReport(Report report)
+    {
+        if (_currentUser == null)
+            return;
+
+        try
+        {
+            var archived = await ReportService.ArchiveAsync(report.Id, _currentUser);
+            if (archived == null)
+            {
+                ToastService.ShowToast("Unable to archive this report.", ToastLevel.Warning);
+                return;
+            }
+
+            ToastService.ShowToast("Report archived.", ToastLevel.Success);
+            await RefreshData();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(ex.Message, ToastLevel.Error);
+        }
+    }
+
+    private async Task DownloadPdf(Report report)
+    {
+        try
+        {
+            if (_currentUser == null)
+                return;
+
+            var fullReport = await ReportService.GetByIdAsync(report.Id, _currentUser);
+            if (fullReport == null || fullReport.Status != ReportStatus.Approved)
+                return;
+
+            var pdfBytes = PdfService.GenerateReportPdf(fullReport);
+            var fileName = $"Report_{fullReport.ReferenceNumber.Replace("/", "_")}.pdf";
+            using var streamRef = new DotNetStreamReference(new MemoryStream(pdfBytes));
+            await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+            ToastService.ShowToast("PDF downloaded.", ToastLevel.Success);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast($"Error: {ex.Message}", ToastLevel.Error);
+        }
+    }
+
+    private static string GetStatusLabel(ReportStatus status) => status switch
+    {
+        ReportStatus.PendingReview => "Pending Review",
+        _ => status.ToString()
+    };
+
+    private static string GetStatusDescription(ReportStatus status) => status switch
+    {
+        ReportStatus.Draft => "Editable draft reports that are still being prepared.",
+        ReportStatus.PendingReview => "Submitted reports waiting for approval or rejection.",
+        ReportStatus.Approved => "Approved reports available for viewing and download.",
+        ReportStatus.Archived => "Finalized reports kept for historical reference.",
+        _ => "Reports"
+    };
+
+    private static string GetStatusBadge(ReportStatus status) => status switch
+    {
+        ReportStatus.Draft => "bg-label-warning",
+        ReportStatus.PendingReview => "bg-label-info",
+        ReportStatus.Approved => "bg-label-success",
+        ReportStatus.Archived => "bg-label-secondary",
+        _ => "bg-label-secondary"
+    };
+
+    private sealed record ReportActionButton(string Title, string CssClass, string Icon, Func<Task> Handler);
+}
+

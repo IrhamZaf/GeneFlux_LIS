@@ -1,0 +1,36 @@
+@inject LIS.Services.ToastService ToastService
+@implements IDisposable
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1055;">
+    @foreach (var toast in ToastService.ToastMessages)
+    {
+        <div class="toast show align-items-center text-white bg-@GetBackgroundColor(toast.Level) border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    @toast.Message
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" @onclick="() => ToastService.RemoveToast(toast.Id)" aria-label="Close"></button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ToastService.OnChange += StateHasChanged;
+    }
+
+    private string GetBackgroundColor(LIS.Models.ToastLevel level) => level switch
+    {
+        LIS.Models.ToastLevel.Success => "success",
+        LIS.Models.ToastLevel.Error => "danger",
+        LIS.Models.ToastLevel.Warning => "warning",
+        _ => "info"
+    };
+
+    public void Dispose()
+    {
+        ToastService.OnChange -= StateHasChanged;
+    }
+}

@@ -1,0 +1,227 @@
+@inject IJSRuntime JS
+@using LIS.Services
+@implements IAsyncDisposable
+
+<div class="card mb-4">
+    <div class="card-header border-0">
+        <div class="d-flex align-items-center justify-content-between">
+            <h4 class="card-title mb-0">
+                <i class="icon-base ti tabler-adjustments-horizontal me-2"></i>Filter Options
+            </h4>
+            <button type="button" class="btn btn-light btn-sm" @onclick="ResetFilters">Reset</button>
+        </div>
+    </div>
+    <div class="card-body pt-0">
+        <div class="row g-3">
+            @if (ShowHospital)
+            {
+                <div class="col-xl-3 col-md-6">
+                    <label class="form-label">Hospital Name</label>
+                    <input class="form-control"
+                           placeholder="Search hospital name"
+                           value="@Filter.HospitalSearch"
+                           @oninput="OnHospitalSearchInput" />
+                </div>
+            }
+
+            @if (ShowDoctor)
+            {
+                <div class="col-xl-3 col-md-6">
+                    <label class="form-label">Doctor Name</label>
+                    <input class="form-control"
+                           placeholder="Search doctor name"
+                           value="@Filter.DoctorSearch"
+                           @oninput="OnDoctorSearchInput" />
+                </div>
+            }
+
+            <div class="col-xl-3 col-md-6">
+                <label class="form-label">Patient Name</label>
+                <input class="form-control"
+                       placeholder="Search patient name"
+                       value="@Filter.PatientName"
+                       @oninput="OnPatientNameInput" />
+            </div>
+
+            <div class="col-xl-3 col-md-6">
+                <label class="form-label">Patient NRIC</label>
+                <input type="text"
+                       class="form-control"
+                       placeholder="000000-00-0000"
+                       inputmode="numeric"
+                       autocomplete="off"
+                       maxlength="14"
+                       value="@Filter.NRIC"
+                       @oninput="OnNricInput" />
+            </div>
+
+            <div class="col-xl-3 col-md-6">
+                <label class="form-label">Patient MRN Number</label>
+                <input class="form-control"
+                       placeholder="Search MRN"
+                       value="@Filter.MRN"
+                       @oninput="OnMrnInput" />
+            </div>
+
+            @if (ShowTest)
+            {
+                <div class="col-xl-3 col-md-6">
+                    <label class="form-label">Test</label>
+                    <select class="form-select" @bind="Filter.FilterTestId" @bind:after="ApplyFiltersImmediateAsync">
+                        <option value="">All tests</option>
+                        @foreach (var t in Tests)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            <div class="col-xl-3 col-md-6">
+                <label class="form-label">Date Range</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="icon-base ti tabler-calendar"></i></span>
+                    <input id="@_dateRangeInputId"
+                           class="form-control"
+                           placeholder="Select date range"
+                           autocomplete="off"
+                           readonly />
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public ReportFilter Filter { get; set; } = new();
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    [Parameter] public bool ShowHospital { get; set; } = true;
+    [Parameter] public bool ShowDoctor { get; set; } = true;
+    [Parameter] public bool ShowTest { get; set; } = true;
+
+    [Parameter] public List<Test> Tests { get; set; } = new();
+
+    private readonly string _dateRangeInputId = $"reportDateRange_{Guid.NewGuid():N}";
+    private DotNetObjectReference<FilterPanel>? _dotNetRef;
+    private CancellationTokenSource? _textDebounce;
+
+    private const int TextDebounceMs = 350;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await InitDateRangePickerAsync();
+    }
+
+    private async Task InitDateRangePickerAsync()
+    {
+        await JS.InvokeVoidAsync(
+            "initReportDateRangePicker",
+            _dateRangeInputId,
+            _dotNetRef,
+            Filter.DateFrom?.ToString("yyyy-MM-dd"),
+            Filter.DateTo?.ToString("yyyy-MM-dd"));
+    }
+
+    [JSInvokable]
+    public async Task SetDateRangeFromPicker(string? startDate, string? endDate)
+    {
+        Filter.DateFrom = DateTime.TryParse(startDate, out var start) ? start : null;
+        Filter.DateTo = DateTime.TryParse(endDate, out var end) ? end : null;
+        await ApplyFiltersImmediateAsync();
+    }
+
+    private async Task ApplyFiltersImmediateAsync()
+    {
+        await OnApply.InvokeAsync();
+    }
+
+    private async Task OnHospitalSearchInput(ChangeEventArgs e)
+    {
+        Filter.HospitalSearch = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
+        await DebouncedApplyAsync();
+    }
+
+    private async Task OnDoctorSearchInput(ChangeEventArgs e)
+    {
+        Filter.DoctorSearch = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
+        await DebouncedApplyAsync();
+    }
+
+    private async Task OnPatientNameInput(ChangeEventArgs e)
+    {
+        Filter.PatientName = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
+        await DebouncedApplyAsync();
+    }
+
+    private async Task OnNricInput(ChangeEventArgs e)
+    {
+        var formatted = PatientIdentityNormalizer.FormatNricInput(e.Value?.ToString());
+        Filter.NRIC = string.IsNullOrWhiteSpace(formatted) ? null : formatted;
+        await DebouncedApplyAsync();
+    }
+
+    private async Task OnMrnInput(ChangeEventArgs e)
+    {
+        Filter.MRN = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
+        await DebouncedApplyAsync();
+    }
+
+    private async Task DebouncedApplyAsync()
+    {
+        _textDebounce?.Cancel();
+        _textDebounce?.Dispose();
+        _textDebounce = new CancellationTokenSource();
+        var token = _textDebounce.Token;
+
+        try
+        {
+            await Task.Delay(TextDebounceMs, token);
+            if (!token.IsCancellationRequested)
+                await OnApply.InvokeAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task ResetFilters()
+    {
+        Filter.FilterHospitalId = null;
+        Filter.FilterDoctorId = null;
+        Filter.HospitalSearch = null;
+        Filter.DoctorSearch = null;
+        Filter.PatientName = null;
+        Filter.NRIC = null;
+        Filter.MRN = null;
+        Filter.FilterTestId = null;
+        Filter.DateFrom = null;
+        Filter.DateTo = null;
+        Filter.SearchTerm = null;
+        await InitDateRangePickerAsync();
+        await OnReset.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _textDebounce?.Cancel();
+        _textDebounce?.Dispose();
+
+        try
+        {
+            await JS.InvokeVoidAsync("destroyReportDateRangePicker", _dateRangeInputId);
+        }
+        catch
+        {
+            // The JS runtime may already be gone during circuit disposal.
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}

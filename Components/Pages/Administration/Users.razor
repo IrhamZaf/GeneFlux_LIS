@@ -1,0 +1,183 @@
+@page "/administration/users"
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject UserService UserService
+@inject SettingsService SettingsService
+@inject CurrentUserService CurrentUserService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ToastService ToastService
+
+<PageTitle>Users - Geneflux LIS</PageTitle>
+
+@if (_loading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-header border-0 d-flex flex-column flex-lg-row justify-content-between gap-3">
+            <div>
+                <h4 class="card-title mb-1">Users</h4>
+                <p class="text-muted mb-0">Create users, assign roles, and manage hospital access.</p>
+            </div>
+            <button type="button" class="btn btn-primary" @onclick="OpenCreateUserDialog">
+                <i class="icon-base ti tabler-user-plus me-1"></i>Create User
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach (var roleTab in _userRoleTabs)
+                {
+                    <button type="button"
+                            class='btn btn-sm @(_activeUserRoleFilter == roleTab.Role ? "btn-primary" : "btn-label-secondary")'
+                            @onclick='() => _activeUserRoleFilter = roleTab.Role'>
+                        @roleTab.Label
+                    </button>
+                }
+            </div>
+
+            <div class="input-group input-group-merge app-search-input mb-3">
+                <span class="input-group-text"><i class="icon-base ti tabler-search"></i></span>
+                <input class="form-control" placeholder="Search user, email, or hospital..." @bind="_userSearch" @bind:event="oninput" />
+            </div>
+
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Hospital</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in FilteredUsers)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@user.FullName</td>
+                                <td>@user.Email</td>
+                                <td>@user.Role</td>
+                                <td>@(user.Hospital?.Name ?? "-")</td>
+                                <td><span class='badge @(user.IsActive ? "bg-label-success" : "bg-label-secondary")'>@(user.IsActive ? "Active" : "Inactive")</span></td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => OpenEditUserDialog(user)">Edit</button>
+                                        @if (user.IsActive)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-label-danger" @onclick="() => DeactivateUser(user)">Deactivate</button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showUserDialog)
+{
+    <UserFormDialog ExistingUser="@_editingUser"
+                    Hospitals="@_hospitals.Where(h => h.IsActive).ToList()"
+                    OnClose="HandleUserDialogClose" />
+}
+
+@code {
+    private readonly (UserRole? Role, string Label)[] _userRoleTabs =
+    [
+        (null, "All"),
+        (UserRole.SuperAdmin, "Super Admin"),
+        (UserRole.LabAdmin, "Lab Admin"),
+        (UserRole.Doctor, "Doctor"),
+        (UserRole.HeadNurse, "Head Nurse"),
+        (UserRole.LabManager, "Lab Manager")
+    ];
+
+    private List<ApplicationUser> _users = new();
+    private List<Hospital> _hospitals = new();
+    private ApplicationUser? _currentUser;
+    private ApplicationUser? _editingUser;
+    private bool _loading = true;
+    private bool _showUserDialog;
+    private string _userSearch = string.Empty;
+    private UserRole? _activeUserRoleFilter;
+
+    private IEnumerable<ApplicationUser> FilteredUsers =>
+        string.IsNullOrWhiteSpace(_userSearch)
+            ? ApplyRoleFilter(_users)
+            : ApplyRoleFilter(_users).Where(user =>
+                user.FullName.Contains(_userSearch, StringComparison.OrdinalIgnoreCase) ||
+                (user.Email?.Contains(_userSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (user.Hospital?.Name?.Contains(_userSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUser = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        await LoadAllData();
+        _loading = false;
+    }
+
+    private async Task LoadAllData()
+    {
+        _users = await UserService.GetAllUsersAsync();
+        _hospitals = (await SettingsService.GetSnapshotAsync()).Hospitals;
+    }
+
+    private void OpenCreateUserDialog()
+    {
+        _editingUser = null;
+        _showUserDialog = true;
+    }
+
+    private void OpenEditUserDialog(ApplicationUser user)
+    {
+        _editingUser = new ApplicationUser
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email ?? string.Empty,
+            Role = user.Role,
+            HospitalId = user.HospitalId,
+            IsActive = user.IsActive
+        };
+        _showUserDialog = true;
+    }
+
+    private async Task HandleUserDialogClose(bool success)
+    {
+        _showUserDialog = false;
+        _editingUser = null;
+        if (!success)
+            return;
+
+        ToastService.ShowToast("User saved.", ToastLevel.Success);
+        await LoadAllData();
+    }
+
+    private async Task DeactivateUser(ApplicationUser user)
+    {
+        if (_currentUser == null)
+            return;
+
+        await UserService.DeactivateUserAsync(user.Id, _currentUser);
+        ToastService.ShowToast("User deactivated.", ToastLevel.Success);
+        await LoadAllData();
+    }
+
+    private IEnumerable<ApplicationUser> ApplyRoleFilter(IEnumerable<ApplicationUser> users)
+    {
+        return _activeUserRoleFilter.HasValue
+            ? users.Where(user => user.Role == _activeUserRoleFilter.Value)
+            : users;
+    }
+}

@@ -1,0 +1,717 @@
+@page "/settings/dropdowns"
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject DropdownService DropdownService
+@inject ToastService ToastService
+
+<PageTitle>Dropdown Management - Geneflux LIS</PageTitle>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-4 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Hospitals</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h4 class="fs-22 fw-semibold mb-1">@_hospitals.Count</h4>
+                        <span class="text-muted">Available facilities</span>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-primary">
+                            <i class="icon-base ti tabler-building-hospital"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Doctors</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h4 class="fs-22 fw-semibold mb-1">@_doctors.Count</h4>
+                        <span class="text-muted">Practitioners mapped</span>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-success">
+                            <i class="icon-base ti tabler-stethoscope"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-4 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Tests</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h4 class="fs-22 fw-semibold mb-1">@_tests.Count</h4>
+                        <span class="text-muted">Catalog entries</span>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-warning">
+                            <i class="icon-base ti tabler-test-pipe"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header border-0 pb-0">
+        <div class="row align-items-center g-3 mb-3">
+            <div class="col-md-8">
+                <h4 class="card-title mb-1">Master Data Library</h4>
+                <p class="text-muted mb-0">Maintain the selectable values used across reports, users, and operational workflows.</p>
+            </div>
+            <div class="col-md-4 text-md-end">
+                @if (_activeTab == "hospital")
+                {
+                    <button type="button" class="btn btn-primary" @onclick="AddHospital">
+                        <i class="icon-base ti tabler-plus me-1"></i>Add Hospital
+                    </button>
+                }
+                else if (_activeTab == "doctor")
+                {
+                    <button type="button" class="btn btn-primary" @onclick="AddDoctor">
+                        <i class="icon-base ti tabler-plus me-1"></i>Add Doctor
+                    </button>
+                }
+                else if (_activeTab == "test")
+                {
+                    <button type="button" class="btn btn-primary" @onclick="AddTest">
+                        <i class="icon-base ti tabler-plus me-1"></i>Add Test
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-2">
+            <ul class="nav nav-pills gap-2" role="tablist">
+                <li class="nav-item">
+                    <button type="button" class='nav-link @(_activeTab == "hospital" ? "active" : null)' @onclick='() => ActiveTab = "hospital"'>
+                        <i class="icon-base ti tabler-building-hospital me-1"></i>Hospitals
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button type="button" class='nav-link @(_activeTab == "doctor" ? "active" : null)' @onclick='() => ActiveTab = "doctor"'>
+                        <i class="icon-base ti tabler-stethoscope me-1"></i>Doctors
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button type="button" class='nav-link @(_activeTab == "test" ? "active" : null)' @onclick='() => ActiveTab = "test"'>
+                        <i class="icon-base ti tabler-test-pipe me-1"></i>Tests
+                    </button>
+                </li>
+            </ul>
+            <div class="input-group input-group-merge app-search-input" style="max-width: 350px;">
+                <span class="input-group-text"><i class="icon-base ti tabler-search"></i></span>
+                <input type="text" class="form-control" placeholder="Search current tab..." @bind="SearchTerm" @bind:event="oninput" />
+            </div>
+        </div>
+    </div>
+
+    <div class="px-0">
+        @if (_activeTab == "hospital")
+        {
+            <div class="card-datatable table-responsive mt-2">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-uppercase small fw-bold">Name</th>
+                            <th class="text-uppercase small fw-bold">Address</th>
+                            <th class="text-uppercase small fw-bold">Status</th>
+                            <th class="text-end text-uppercase small fw-bold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (PagedHospitals.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <div class="empty-state-panel py-4">
+                                        <lord-icon src="https://cdn.lordicon.com/msoeawqm.json"
+                                                   trigger="loop"
+                                                   colors="primary:#121331,secondary:#08a88a"
+                                                   style="width:72px;height:72px">
+                                        </lord-icon>
+                                        <h5 class="mt-3 mb-1">No hospitals found</h5>
+                                        <p class="text-muted mb-0">Try another search term or add a new hospital.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var hospital in PagedHospitals)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@hospital.Name</td>
+                                    <td>@hospital.Address</td>
+                                    <td>
+                                        <span class='badge @(hospital.IsActive ? "bg-label-success" : "bg-label-secondary") text-uppercase'>
+                                            @(hospital.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-icon btn-text-secondary rounded-pill" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="icon-base ti tabler-dots-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li>
+                                                    <button type="button" class="dropdown-item" @onclick="() => EditHospital(hospital)">
+                                                        <i class="icon-base ti tabler-edit me-2"></i>Edit
+                                                    </button>
+                                                </li>
+                                                <li>
+                                                    <button type="button" class="dropdown-item" @onclick="() => DeleteHospital(hospital)">
+                                                        <i class="icon-base ti tabler-trash me-2"></i>Deactivate
+                                                    </button>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer border-top d-flex flex-wrap justify-content-between align-items-center py-2 px-4">
+                <div class="text-muted small">
+                    Showing @((_currentPage - 1) * _pageSize + 1) to @Math.Min(_currentPage * _pageSize, FilteredHospitals.Count) of @FilteredHospitals.Count entries
+                </div>
+                <nav aria-label="Page navigation">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class='page-item @(_currentPage == 1 ? "disabled" : "")'>
+                            <button class="page-link" @onclick="() => ChangePage(_currentPage - 1)"><i class="ti tabler-chevron-left"></i></button>
+                        </li>
+                        @for (int i = 1; i <= TotalHospitalPages; i++)
+                        {
+                            var pageNum = i;
+                            <li class='page-item @(_currentPage == pageNum ? "active" : "")'>
+                                <button class="page-link" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                            </li>
+                        }
+                        <li class='page-item @(_currentPage == TotalHospitalPages || TotalHospitalPages == 0 ? "disabled" : "")'>
+                            <button class="page-link" @onclick="() => ChangePage(_currentPage + 1)"><i class="ti tabler-chevron-right"></i></button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+        else if (_activeTab == "doctor")
+        {
+            <div class="card-datatable table-responsive mt-2">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-uppercase small fw-bold">Name</th>
+                            <th class="text-uppercase small fw-bold">Hospital</th>
+                            <th class="text-uppercase small fw-bold">MMC No.</th>
+                            <th class="text-uppercase small fw-bold">Specialty</th>
+                            <th class="text-uppercase small fw-bold">Email</th>
+                            <th class="text-end text-uppercase small fw-bold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (PagedDoctors.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <div class="empty-state-panel py-4">
+                                        <lord-icon src="https://cdn.lordicon.com/msoeawqm.json"
+                                                   trigger="loop"
+                                                   colors="primary:#121331,secondary:#08a88a"
+                                                   style="width:72px;height:72px">
+                                        </lord-icon>
+                                        <h5 class="mt-3 mb-1">No doctors found</h5>
+                                        <p class="text-muted mb-0">Try another search term or add a new doctor.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var doctor in PagedDoctors)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar avatar-sm me-2">
+                                                <span class="avatar-initial rounded-circle bg-label-info">@GetInitials(doctor.Name)</span>
+                                            </div>
+                                            <div class="d-flex flex-column">
+                                                <span class="fw-semibold text-heading text-truncate">@doctor.Name</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@doctor.Hospital?.Name</span>
+                                    </td>
+                                    <td>@doctor.MMCNo</td>
+                                    <td><span class="badge bg-label-primary">@doctor.Specialty</span></td>
+                                    <td>@doctor.Email</td>
+                                    <td class="text-end">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-icon btn-text-secondary rounded-pill" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="icon-base ti tabler-dots-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li>
+                                                    <button type="button" class="dropdown-item" @onclick="() => EditDoctor(doctor)">
+                                                        <i class="icon-base ti tabler-edit me-2"></i>Edit
+                                                    </button>
+                                                </li>
+                                                <li>
+                                                    <button type="button" class="dropdown-item" @onclick="() => DeleteDoctor(doctor)">
+                                                        <i class="icon-base ti tabler-trash me-2"></i>Deactivate
+                                                    </button>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer border-top d-flex flex-wrap justify-content-between align-items-center py-2 px-4">
+                <div class="text-muted small">
+                    Showing @((_currentPage - 1) * _pageSize + 1) to @Math.Min(_currentPage * _pageSize, FilteredDoctors.Count) of @FilteredDoctors.Count entries
+                </div>
+                <nav aria-label="Page navigation">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class='page-item @(_currentPage == 1 ? "disabled" : "")'>
+                            <button class="page-link" @onclick="() => ChangePage(_currentPage - 1)"><i class="ti tabler-chevron-left"></i></button>
+                        </li>
+                        @for (int i = 1; i <= TotalDoctorPages; i++)
+                        {
+                            var pageNum = i;
+                            <li class='page-item @(_currentPage == pageNum ? "active" : "")'>
+                                <button class="page-link" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                            </li>
+                        }
+                        <li class='page-item @(_currentPage == TotalDoctorPages || TotalDoctorPages == 0 ? "disabled" : "")'>
+                            <button class="page-link" @onclick="() => ChangePage(_currentPage + 1)"><i class="ti tabler-chevron-right"></i></button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+        else if (_activeTab == "test")
+        {
+            <div class="card-datatable table-responsive mt-2">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="text-uppercase small fw-bold">Test Name</th>
+                            <th class="text-uppercase small fw-bold">Method</th>
+                            <th class="text-uppercase small fw-bold">Status</th>
+                            <th class="text-end text-uppercase small fw-bold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (PagedTests.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <div class="empty-state-panel py-4">
+                                        <lord-icon src="https://cdn.lordicon.com/msoeawqm.json"
+                                                   trigger="loop"
+                                                   colors="primary:#121331,secondary:#08a88a"
+                                                   style="width:72px;height:72px">
+                                        </lord-icon>
+                                        <h5 class="mt-3 mb-1">No tests found</h5>
+                                        <p class="text-muted mb-0">Try another search term or add a new test.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var test in PagedTests)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@test.Name</td>
+                                    <td><span class="badge bg-label-info">@test.TestMethod</span></td>
+                                    <td>
+                                        <span class='badge @(test.IsActive ? "bg-label-success" : "bg-label-secondary") text-uppercase'>
+                                            @(test.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-icon btn-text-secondary rounded-pill" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="icon-base ti tabler-dots-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li>
+                                                    <button type="button" class="dropdown-item" @onclick="() => EditTest(test)">
+                                                        <i class="icon-base ti tabler-edit me-2"></i>Edit
+                                                    </button>
+                                                </li>
+                                                <li>
+                                                    <button type="button" class="dropdown-item" @onclick="() => DeleteTest(test)">
+                                                        <i class="icon-base ti tabler-trash me-2"></i>Deactivate
+                                                    </button>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer border-top d-flex flex-wrap justify-content-between align-items-center py-2 px-4">
+                <div class="text-muted small">
+                    Showing @((_currentPage - 1) * _pageSize + 1) to @Math.Min(_currentPage * _pageSize, FilteredTests.Count) of @FilteredTests.Count entries
+                </div>
+                <nav aria-label="Page navigation">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class='page-item @(_currentPage == 1 ? "disabled" : "")'>
+                            <button class="page-link" @onclick="() => ChangePage(_currentPage - 1)"><i class="ti tabler-chevron-left"></i></button>
+                        </li>
+                        @for (int i = 1; i <= TotalTestPages; i++)
+                        {
+                            var pageNum = i;
+                            <li class='page-item @(_currentPage == pageNum ? "active" : "")'>
+                                <button class="page-link" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                            </li>
+                        }
+                        <li class='page-item @(_currentPage == TotalTestPages || TotalTestPages == 0 ? "disabled" : "")'>
+                            <button class="page-link" @onclick="() => ChangePage(_currentPage + 1)"><i class="ti tabler-chevron-right"></i></button>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+</div>
+
+@if (_showHospitalModal)
+{
+    <GenericFormDialog Title="@(_hospitalToEdit == null ? "Add Hospital" : "Edit Hospital")"
+                       Fields='@(new[] { "Name", "Address" })'
+                       Values='@(new Dictionary<string, string> { { "Name", _hospitalToEdit?.Name ?? "" }, { "Address", _hospitalToEdit?.Address ?? "" } })'
+                       OnClose="HandleHospitalModalClose" />
+}
+
+@if (_showDoctorModal)
+{
+    <DoctorFormDialog Title="@(_doctorToEdit == null ? "Add Doctor" : "Edit Doctor")"
+                      ExistingDoctor="@_doctorToEdit"
+                      Hospitals="@_hospitals"
+                      OnClose="HandleDoctorModalClose" />
+}
+
+@if (_showTestModal)
+{
+    <GenericFormDialog Title="@(_testToEdit == null ? "Add Test" : "Edit Test")"
+                       Fields='@(new[] { "Name", "TestMethod" })'
+                       Values='@(new Dictionary<string, string> { { "Name", _testToEdit?.Name ?? "" }, { "TestMethod", _testToEdit?.TestMethod ?? "" } })'
+                       OnClose="HandleTestModalClose" />
+}
+
+@if (_showDeleteModal)
+{
+    <DeleteConfirmDialog Title="@_deleteTitle"
+                         Message="@_deleteMessage"
+                         ItemLabel="@_deleteItemLabel"
+                         ReferenceNumber="@_deleteReference"
+                         ConfirmText="@_deleteConfirmText"
+                         OnClose="HandleDeleteConfirm" />
+}
+
+@code {
+    private string _activeTab = "hospital";
+    private string _searchTerm = "";
+    private List<Hospital> _hospitals = new();
+    private List<Doctor> _doctors = new();
+    private List<Test> _tests = new();
+
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+
+    private bool _showHospitalModal;
+    private Hospital? _hospitalToEdit;
+
+    private bool _showDoctorModal;
+    private Doctor? _doctorToEdit;
+
+    private bool _showTestModal;
+    private Test? _testToEdit;
+
+    private bool _showDeleteModal;
+    private string _deleteTitle = "";
+    private string _deleteMessage = "";
+    private string _deleteItemLabel = "";
+    private string _deleteReference = "";
+    private string _deleteConfirmText = "";
+    private Func<Task>? _onDeleteConfirm;
+
+    private string ActiveTab
+    {
+        get => _activeTab;
+        set
+        {
+            if (_activeTab != value)
+            {
+                _activeTab = value;
+                _currentPage = 1;
+            }
+        }
+    }
+
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            if (_searchTerm != value)
+            {
+                _searchTerm = value;
+                _currentPage = 1;
+            }
+        }
+    }
+
+    private List<Hospital> FilteredHospitals =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _hospitals
+            : _hospitals.Where(h =>
+                h.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (h.Address?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+
+    private List<Hospital> PagedHospitals => FilteredHospitals
+        .Skip((_currentPage - 1) * _pageSize)
+        .Take(_pageSize)
+        .ToList();
+
+    private int TotalHospitalPages => (int)Math.Ceiling((double)FilteredHospitals.Count / _pageSize);
+
+    private List<Doctor> FilteredDoctors =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _doctors
+            : _doctors.Where(d =>
+                d.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (d.Email?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (d.Specialty?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (d.Hospital?.Name?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+
+    private List<Doctor> PagedDoctors => FilteredDoctors
+        .Skip((_currentPage - 1) * _pageSize)
+        .Take(_pageSize)
+        .ToList();
+
+    private int TotalDoctorPages => (int)Math.Ceiling((double)FilteredDoctors.Count / _pageSize);
+
+    private List<Test> FilteredTests =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _tests
+            : _tests.Where(t =>
+                t.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (t.TestMethod?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+
+    private List<Test> PagedTests => FilteredTests
+        .Skip((_currentPage - 1) * _pageSize)
+        .Take(_pageSize)
+        .ToList();
+
+    private int TotalTestPages => (int)Math.Ceiling((double)FilteredTests.Count / _pageSize);
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+    }
+
+    private static string GetInitials(string value)
+    {
+        var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(value) ? "I" : value[..1].ToUpperInvariant();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _hospitals = await DropdownService.GetHospitalsAsync();
+        _doctors = await DropdownService.GetDoctorsAsync();
+        _tests = await DropdownService.GetTestsAsync();
+    }
+
+    private void AddHospital()
+    {
+        _hospitalToEdit = null;
+        _showHospitalModal = true;
+    }
+
+    private void EditHospital(Hospital hospital)
+    {
+        _hospitalToEdit = hospital;
+        _showHospitalModal = true;
+    }
+
+    private async Task HandleHospitalModalClose(Dictionary<string, string>? values)
+    {
+        _showHospitalModal = false;
+        if (values != null)
+        {
+            if (_hospitalToEdit == null)
+            {
+                await DropdownService.CreateHospitalAsync(new Hospital { Name = values["Name"], Address = values["Address"] });
+                ToastService.ShowToast("Hospital added.", ToastLevel.Success);
+            }
+            else
+            {
+                _hospitalToEdit.Name = values["Name"];
+                _hospitalToEdit.Address = values["Address"];
+                await DropdownService.UpdateHospitalAsync(_hospitalToEdit);
+                ToastService.ShowToast("Hospital updated.", ToastLevel.Success);
+            }
+            await LoadData();
+        }
+        _hospitalToEdit = null;
+    }
+
+    private void DeleteHospital(Hospital hospital)
+    {
+        _deleteTitle = "Deactivate Hospital";
+        _deleteMessage = "This hospital will no longer be available for new report selection.";
+        _deleteItemLabel = "Hospital";
+        _deleteReference = hospital.Name;
+        _deleteConfirmText = "Deactivate";
+        _onDeleteConfirm = async () => {
+            await DropdownService.DeleteHospitalAsync(hospital.Id);
+            ToastService.ShowToast("Hospital deactivated.", ToastLevel.Success);
+        };
+        _showDeleteModal = true;
+    }
+
+    private void AddDoctor()
+    {
+        _doctorToEdit = null;
+        _showDoctorModal = true;
+    }
+
+    private void EditDoctor(Doctor doctor)
+    {
+        _doctorToEdit = doctor;
+        _showDoctorModal = true;
+    }
+
+    private async Task HandleDoctorModalClose(Doctor? doctor)
+    {
+        _showDoctorModal = false;
+        if (doctor != null)
+        {
+            try
+            {
+                if (_doctorToEdit == null)
+                {
+                    await DropdownService.CreateDoctorAsync(doctor);
+                    ToastService.ShowToast("Doctor added.", ToastLevel.Success);
+                }
+                else
+                {
+                    await DropdownService.UpdateDoctorAsync(doctor);
+                    ToastService.ShowToast("Doctor updated.", ToastLevel.Success);
+                }
+                await LoadData();
+            }
+            catch (InvalidOperationException ex)
+            {
+                ToastService.ShowToast(ex.Message, ToastLevel.Error);
+            }
+        }
+        _doctorToEdit = null;
+    }
+
+    private void DeleteDoctor(Doctor doctor)
+    {
+        _deleteTitle = "Deactivate Doctor";
+        _deleteMessage = "This doctor will no longer appear in the active doctor selection lists.";
+        _deleteItemLabel = "Doctor";
+        _deleteReference = doctor.Name;
+        _deleteConfirmText = "Deactivate";
+        _onDeleteConfirm = async () => {
+            await DropdownService.DeleteDoctorAsync(doctor.Id);
+            ToastService.ShowToast("Doctor deactivated.", ToastLevel.Success);
+        };
+        _showDeleteModal = true;
+    }
+
+    private void AddTest()
+    {
+        _testToEdit = null;
+        _showTestModal = true;
+    }
+
+    private void EditTest(Test test)
+    {
+        _testToEdit = test;
+        _showTestModal = true;
+    }
+
+    private async Task HandleTestModalClose(Dictionary<string, string>? values)
+    {
+        _showTestModal = false;
+        if (values != null)
+        {
+            if (_testToEdit == null)
+            {
+                await DropdownService.CreateTestAsync(new Test { Name = values["Name"], TestMethod = values["TestMethod"] });
+                ToastService.ShowToast("Test added.", ToastLevel.Success);
+            }
+            else
+            {
+                _testToEdit.Name = values["Name"];
+                _testToEdit.TestMethod = values["TestMethod"];
+                await DropdownService.UpdateTestAsync(_testToEdit);
+                ToastService.ShowToast("Test updated.", ToastLevel.Success);
+            }
+            await LoadData();
+        }
+        _testToEdit = null;
+    }
+
+    private void DeleteTest(Test test)
+    {
+        _deleteTitle = "Deactivate Test";
+        _deleteMessage = "This test will no longer be available for new laboratory reports.";
+        _deleteItemLabel = "Test";
+        _deleteReference = test.Name;
+        _deleteConfirmText = "Deactivate";
+        _onDeleteConfirm = async () => {
+            await DropdownService.DeleteTestAsync(test.Id);
+            ToastService.ShowToast("Test deactivated.", ToastLevel.Success);
+        };
+        _showDeleteModal = true;
+    }
+
+    private async Task HandleDeleteConfirm(bool confirmed)
+    {
+        _showDeleteModal = false;
+        if (confirmed && _onDeleteConfirm != null)
+        {
+            await _onDeleteConfirm();
+            await LoadData();
+        }
+        _onDeleteConfirm = null;
+    }
+}

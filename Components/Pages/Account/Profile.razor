@@ -1,0 +1,171 @@
+@page "/profile"
+@attribute [Authorize]
+@inject AuthenticationStateProvider AuthStateProvider
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject ToastService ToastService
+@inject CurrentUserService CurrentUserService
+
+<PageTitle>My Profile - Geneflux LIS</PageTitle>
+
+@if (_user != null)
+{
+    <div class="row g-4">
+        <div class="col-xl-5">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-center">
+                        <div class="avatar avatar-xl mx-auto mb-4">
+                            <span class="avatar-initial rounded-circle bg-label-primary profile-avatar-lg">
+                                @_user.FullName[..1].ToUpper()
+                            </span>
+                        </div>
+                        <h5 class="fs-16 mb-1">@_user.FullName</h5>
+                        <p class="text-muted mb-3">@GetRoleDisplay()</p>
+                        <div class="border-top border-top-dashed pt-4">
+                            <div class="table-responsive">
+                                <table class="table table-borderless mb-0">
+                                    <tbody>
+                                        <tr>
+                                            <th class="ps-0" scope="row">Email :</th>
+                                            <td class="text-muted">@_user.Email</td>
+                                        </tr>
+                                        <tr>
+                                            <th class="ps-0" scope="row">Phone :</th>
+                                            <td class="text-muted">@(!string.IsNullOrWhiteSpace(_user.PhoneNumber) ? _user.PhoneNumber : "-")</td>
+                                        </tr>
+                                        <tr>
+                                            <th class="ps-0" scope="row">Role :</th>
+                                            <td class="text-muted">@GetRoleDisplay()</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-7">
+            <div class="card">
+                <div class="card-header border-0">
+                    <h4 class="card-title mb-0">Profile Information</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Full Name</label>
+                            <input class="form-control" @bind="_user.FullName" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Email</label>
+                            <input class="form-control" value="@_user.Email" disabled />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Phone</label>
+                            <input class="form-control" @bind="_user.PhoneNumber" />
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-primary" @onclick="SaveProfile">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header border-0">
+                    <h4 class="card-title mb-0">Change Password</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" class="form-control" @bind="_currentPassword" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">New Password</label>
+                            <input type="password" class="form-control" @bind="_newPassword" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control" @bind="_confirmPassword" />
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-label-primary" @onclick="ChangePassword">Update Password</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private ApplicationUser? _user;
+    private string _currentPassword = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _user = await CurrentUserService.GetCurrentUserAsync(authState.User);
+    }
+
+    private string GetRoleDisplay()
+    {
+        return _user?.Role switch
+        {
+            UserRole.SuperAdmin => "Super Admin",
+            UserRole.LabAdmin => "Lab Admin",
+            UserRole.Doctor => "Doctor",
+            UserRole.LabManager => "Lab Manager",
+            UserRole.HeadNurse => "Head Nurse",
+            _ => "User"
+        };
+    }
+
+    private async Task SaveProfile()
+    {
+        if (_user == null) return;
+        var trackedUser = await UserManager.FindByIdAsync(_user.Id);
+        if (trackedUser == null) return;
+
+        trackedUser.FullName = _user.FullName;
+        trackedUser.PhoneNumber = _user.PhoneNumber;
+        trackedUser.UpdatedAt = DateTime.UtcNow;
+
+        var result = await UserManager.UpdateAsync(trackedUser);
+        if (result.Succeeded)
+            ToastService.ShowToast("Profile updated successfully.", ToastLevel.Success);
+        else
+            ToastService.ShowToast("Failed to update profile.", ToastLevel.Error);
+    }
+
+    private async Task ChangePassword()
+    {
+        if (_user == null) return;
+
+        if (_newPassword != _confirmPassword)
+        {
+            ToastService.ShowToast("Passwords do not match.", ToastLevel.Warning);
+            return;
+        }
+
+        var trackedUser = await UserManager.FindByIdAsync(_user.Id);
+        if (trackedUser == null) return;
+
+        var result = await UserManager.ChangePasswordAsync(trackedUser, _currentPassword, _newPassword);
+        if (result.Succeeded)
+        {
+            ToastService.ShowToast("Password changed successfully.", ToastLevel.Success);
+            _currentPassword = _newPassword = _confirmPassword = "";
+        }
+        else
+        {
+            foreach (var error in result.Errors)
+                ToastService.ShowToast(error.Description, ToastLevel.Error);
+        }
+    }
+}

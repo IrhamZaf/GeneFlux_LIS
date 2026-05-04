@@ -1,0 +1,389 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject RoleAccessService RoleAccess
+@inject CurrentUserService CurrentUserService
+@inject StaffRegistrationService StaffRegistrationService
+@using Microsoft.AspNetCore.Components.Authorization
+@using LIS.Models
+@using LIS.Services
+
+<LIS.Components.Shared.ToastContainer />
+
+<AuthorizeView Context="authState">
+    <Authorized>
+        <div class="layout-wrapper layout-content-navbar">
+            <div class="layout-container">
+                <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
+                    <div class="app-brand demo">
+                        <a href="/" class="app-brand-link">
+                            <span class="app-brand-logo demo">
+                                <img src="img/Geneflux_logo3.png" alt="Geneflux Logo" style="height: 34px;" />
+                            </span>
+                        </a>
+
+                        <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto">
+                            <i class="icon-base ti tabler-chevron-left d-none d-xl-block"></i>
+                            <i class="icon-base ti tabler-x d-block d-xl-none"></i>
+                        </a>
+                    </div>
+
+                    <div class="menu-inner-shadow"></div>
+
+                    <ul class="menu-inner py-1">
+                        <li class="menu-header small text-uppercase">
+                            <span class="menu-header-text">Process Flow</span>
+                        </li>
+                        @if (_roleLoaded)
+                        {
+                            var flowItems = RoleAccess.GetFlowItems(_currentRole);
+                            var workspaceItems = flowItems.ToList();
+                            var administrationEntries = RoleAccess.GetAdministrationMenu(_currentRole, _pendingStaffRegistrations);
+
+                            <li class="menu-item">
+                                <div class="px-4 pb-2">
+                                    <span class="badge rounded-pill @RoleAccess.GetRoleThemeClass(_currentRole) text-wrap text-start">
+                                        @RoleAccess.GetRoleDisplayName(_currentRole)
+                                    </span>
+                                </div>
+                            </li>
+                            @foreach (var item in workspaceItems)
+                            {
+                                <li class='menu-item@(IsActive(item.Href) ? " active" : "")'>
+                                    <a href="@item.Href" class="menu-link">
+                                        <i class="menu-icon @item.Icon"></i>
+                                        <div>@item.Title</div>
+                                    </a>
+                                </li>
+                            }
+
+                            @if (administrationEntries.Count > 0)
+                            {
+                                <li class="menu-header small text-uppercase">
+                                    <span class="menu-header-text">Administration</span>
+                                </li>
+                                @foreach (var entry in administrationEntries)
+                                {
+                                    @switch (entry)
+                                    {
+                                        case AdministrationMenuLink link:
+                                            <li class='menu-item@(IsActive(link.Href) ? " active" : "")'>
+                                                <a href="@link.Href" class="menu-link">
+                                                    <i class="menu-icon @link.Icon"></i>
+                                                    <div>@link.Title</div>
+                                                </a>
+                                            </li>
+                                            break;
+                                        case AdministrationMenuGroup group:
+                                            <li class='menu-item@(AdminGroupIsOpen(group) ? " active open" : "")'>
+                                                @* Blazor toggles open/active — Vuexy menu.js often misses clicks on Interactive Server / nested markup *@
+                                                <a href="javascript:void(0);"
+                                                   class="menu-link lis-admin-submenu-toggle"
+                                                   role="button"
+                                                   aria-expanded="@(AdminGroupIsOpen(group) ? "true" : "false")"
+                                                   @onclick="@(() => ToggleAdminGroup(group.Title))"
+                                                   @onclick:preventDefault="true"
+                                                   @onclick:stopPropagation="true">
+                                                    <i class="menu-icon @group.Icon"></i>
+                                                    <div class="d-flex align-items-center justify-content-between flex-grow-1 gap-2 pe-lg-2">
+                                                        <span>@group.Title</span>
+                                                        @if (group.ParentBadgeCount is > 0)
+                                                        {
+                                                            <span class="badge rounded-pill bg-danger flex-shrink-0">@group.ParentBadgeCount</span>
+                                                        }
+                                                    </div>
+                                                </a>
+                                                <ul class="menu-sub">
+                                                    @foreach (var child in group.Children)
+                                                    {
+                                                        <li class='menu-item@(IsActive(child.Href) ? " active" : "")'>
+                                                            <a href="@child.Href" class="menu-link">
+                                                                <div class="d-flex align-items-center justify-content-between flex-grow-1 gap-2 w-100">
+                                                                    <span>@child.Title</span>
+                                                                    @if (child.BadgeCount is > 0)
+                                                                    {
+                                                                        <span class="badge rounded-pill bg-danger flex-shrink-0">@child.BadgeCount</span>
+                                                                    }
+                                                                </div>
+                                                            </a>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            </li>
+                                            break;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <li class='menu-item@(IsActive("/") ? " active" : "")'>
+                                <a href="/" class="menu-link">
+                                    <i class="menu-icon icon-base ti tabler-dashboard"></i>
+                                    <div>Dashboard</div>
+                                </a>
+                            </li>
+                        }
+
+                    </ul>
+                </aside>
+
+                <div class="layout-page">
+                    <nav class="layout-navbar container-fluid navbar navbar-expand-xl navbar-detached align-items-center bg-navbar-theme" id="layout-navbar">
+                        <div class="layout-menu-toggle navbar-nav align-items-xl-center me-4 me-xl-0 d-xl-none">
+                            <a class="nav-item nav-link px-0 me-xl-6" href="javascript:void(0)">
+                                <i class="icon-base ti tabler-menu-2 icon-md"></i>
+                            </a>
+                        </div>
+
+                        <div class="navbar-nav-right d-flex align-items-center justify-content-between w-100" id="navbar-collapse">
+                            <div class="navbar-nav align-items-center">
+                                <div class="nav-item d-flex align-items-center">
+                                    <span class="navbar-search-icon me-2">
+                                        <i class="icon-base ti tabler-search"></i>
+                                    </span>
+                                    <input type="text" class="form-control border-0 shadow-none ps-1" placeholder="Search is coming soon" aria-label="Search" />
+                                </div>
+                            </div>
+
+                            <ul class="navbar-nav flex-row align-items-center ms-md-auto">
+                                <li class="nav-item me-3">
+                                    <span class="badge rounded-pill bg-label-success">Live</span>
+                                </li>
+                                <li class="nav-item dropdown-user dropdown">
+                                    <a class="nav-link dropdown-toggle hide-arrow p-0" href="javascript:void(0);" data-bs-toggle="dropdown">
+                                        <div class="avatar avatar-online">
+                                            <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(authState)</span>
+                                        </div>
+                                    </a>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <a class="dropdown-item mt-0" href="/profile">
+                                                <div class="d-flex align-items-center">
+                                                    <div class="flex-shrink-0 me-2">
+                                                        <div class="avatar avatar-online">
+                                                            <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(authState)</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex-grow-1">
+                                                        <h6 class="mb-0">@GetFullName(authState)</h6>
+                                                        <small class="text-body-secondary">@GetRole(authState)</small>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        </li>
+                                        <li><div class="dropdown-divider my-1"></div></li>
+                                        <li>
+                                            <a class="dropdown-item" href="/profile">
+                                                <i class="icon-base ti tabler-user me-3"></i><span>My Profile</span>
+                                            </a>
+                                        </li>
+                                        <li><div class="dropdown-divider my-1"></div></li>
+                                        <li>
+                                            <button type="button" class="dropdown-item" @onclick="Logout">
+                                                <i class="icon-base ti tabler-logout me-3"></i><span>Logout</span>
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                    </nav>
+
+                    <div class="content-wrapper">
+                        <div class="container-fluid flex-grow-1 container-p-y">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                                <div>
+                                    <h4 class="mb-1">@_pageTitle</h4>
+                                    <p class="mb-0 text-muted">@_pageSubtitle</p>
+                                </div>
+                                <nav aria-label="breadcrumb">
+                                    <ol class="breadcrumb breadcrumb-style1 mb-0">
+                                        <li class="breadcrumb-item"><span>@_breadcrumbSection</span></li>
+                                        <li class="breadcrumb-item active">@_pageTitle</li>
+                                    </ol>
+                                </nav>
+                            </div>
+
+                            <div class="fade-in">
+                                @Body
+                            </div>
+                        </div>
+
+                        <footer class="content-footer footer bg-footer-theme">
+                            <div class="container-fluid d-flex flex-wrap justify-content-between py-3 flex-md-row flex-column">
+                                <div class="mb-2 mb-md-0">
+                                    @DateTime.Now.Year &#169; Geneflux LIS.
+                                </div>
+                                <div class="d-none d-lg-inline-block">
+                                    Vuexy interface for laboratory workflow
+                                </div>
+                            </div>
+                        </footer>
+
+                        <div class="content-backdrop fade"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layout-overlay layout-menu-toggle"></div>
+            <div class="drag-target"></div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        @Body
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string _pageTitle = "Dashboard";
+    private string _pageSubtitle = "Overview of laboratory activity and current workload.";
+    private string _breadcrumbSection = "Dashboards";
+    private bool _canManageSettings;
+    private UserRole _currentRole;
+    private bool _roleLoaded;
+    private int _pendingStaffRegistrations;
+
+    private bool IsActive(string href)
+    {
+        var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (href == "/") return string.IsNullOrEmpty(relativePath);
+        return relativePath.StartsWith(href.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsGroupActive(AdministrationMenuGroup group) =>
+        group.Children.Any(c => IsActive(c.Href));
+
+    private readonly Dictionary<string, bool> _adminMenuGroupExpanded = new();
+
+    private bool AdminGroupIsOpen(AdministrationMenuGroup group)
+    {
+        if (IsGroupActive(group)) return true;
+        return _adminMenuGroupExpanded.GetValueOrDefault(group.Title);
+    }
+
+    private void ToggleAdminGroup(string title)
+    {
+        _adminMenuGroupExpanded[title] = !_adminMenuGroupExpanded.GetValueOrDefault(title);
+        StateHasChanged();
+    }
+
+    private bool IsInSection(string section)
+    {
+        var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri).ToLowerInvariant();
+
+        return section switch
+        {
+            "main" => string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("reports") || relativePath.StartsWith("patients") || relativePath.StartsWith("profile"),
+            "administration" => relativePath.StartsWith("administration"),
+            _ => false
+        };
+    }
+
+    private string GetInitials(AuthenticationState context)
+    {
+        var name = context.User.Identity?.Name ?? "U";
+        var parts = name.Split('@')[0].Split('.');
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant()
+            : name[..1].ToUpperInvariant();
+    }
+
+    private string GetFullName(AuthenticationState context)
+    {
+        return context.User.Identity?.Name?.Split('@')[0] ?? "User";
+    }
+
+    private string GetRole(AuthenticationState context)
+    {
+        if (context.User.IsInRole("SuperAdmin")) return "Super Admin";
+        if (context.User.IsInRole("LabAdmin") || context.User.IsInRole("Admin")) return "Lab Admin";
+        if (context.User.IsInRole("Doctor")) return "Doctor";
+        if (context.User.IsInRole("LabManager")) return "Lab Manager";
+        if (context.User.IsInRole("HeadNurse")) return "Head Nurse";
+        return "User";
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+        UpdateTitle();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var username = authState.User.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            var user = await CurrentUserService.GetCurrentUserAsync(authState.User);
+            if (user != null)
+            {
+                _currentRole = user.Role;
+                _canManageSettings = RoleAccess.CanManageSettings(user.Role);
+                _roleLoaded = true;
+                await RefreshPendingRegistrationBadgeAsync();
+            }
+        }
+    }
+
+    private async Task RefreshPendingRegistrationBadgeAsync()
+    {
+        if (!_roleLoaded) return;
+        if (_currentRole != UserRole.SuperAdmin && _currentRole != UserRole.LabAdmin) return;
+        try
+        {
+            _pendingStaffRegistrations = await StaffRegistrationService.GetPendingRegistrationCountAsync();
+        }
+        catch
+        {
+            _pendingStaffRegistrations = 0;
+        }
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        UpdateTitle();
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshPendingRegistrationBadgeAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void UpdateTitle()
+    {
+        var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri).ToLowerInvariant();
+        (_pageTitle, _pageSubtitle, _breadcrumbSection) = relativePath switch
+        {
+            "" => ("Analytics", "Overview of laboratory activity and current workload.", "Dashboards"),
+            "reports" => ("Reports", "Unified report workspace with status-based actions and search.", "Workspace"),
+            "patients" => ("Patient Directory", "Review patient records, results, and downloadable reports.", "Dashboards"),
+            "patients/search" => ("Search Patient", "Search and select patients based on your role access.", "Process Flow"),
+            "patients/view" => ("View Patient Data", "View patient profile, report history, and test results.", "Process Flow"),
+            "patients/download" => ("Download Report", "Download or print completed patient reports.", "Process Flow"),
+            "administration" => ("Administration", "Manage hospitals and users across the system.", "Administration"),
+            "administration/hospitals" => ("Hospitals", "Manage hospitals and review administrative details.", "Administration"),
+            "administration/users" => ("Users", "Create users, assign roles, and manage hospital access.", "Administration"),
+            "administration/registration-requests" => ("Staff registrations", "Approve or reject self-service sign-ups before accounts are created.", "Administration"),
+            "profile" => ("My Profile", "Update your account details and password.", "Account"),
+            _ => ("Geneflux LIS", "Laboratory information system", "Dashboards")
+        };
+
+        if (relativePath.StartsWith("administration/hospitals/"))
+            (_pageTitle, _pageSubtitle, _breadcrumbSection) = ("Hospital Details", "Administrative summary of hospital usage, users, and reports.", "Administration");
+
+        StateHasChanged();
+    }
+
+    private void Logout()
+    {
+        Navigation.NavigateTo("/account/logout", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

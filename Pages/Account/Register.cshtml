@@ -1,0 +1,141 @@
+@page "/account/register"
+@model LIS.Pages.Account.RegisterModel
+@using LIS.Models
+@{
+    ViewData["Title"] = "Staff Registration";
+    Layout = "_AuthLayout";
+}
+
+<div class="card lis-login-card">
+    <div class="card-body p-5">
+        <div class="text-center mb-4">
+            <h4 class="mb-1">Request access</h4>
+            <p class="text-muted mb-0">Doctors, Head Nurses, and Lab Managers register here. Your account is created only after an administrator approves your request.</p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.StatusMessage))
+        {
+            <div class="alert @(Model.Success ? "alert-success" : "alert-warning") mb-4" role="alert">
+                @Model.StatusMessage
+            </div>
+        }
+
+        <form method="post">
+            @Html.AntiForgeryToken()
+
+            <div class="mb-3">
+                <label class="form-label" for="fullName">Full name</label>
+                <input type="text" class="form-control form-control-lg" id="fullName" asp-for="FullName" placeholder="As per MMC records" required />
+                <span asp-validation-for="FullName" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="email">Work email</label>
+                <input type="email" class="form-control form-control-lg" id="email" asp-for="Email" placeholder="you@hospital.my" required />
+                <span asp-validation-for="Email" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="nric">NRIC number</label>
+                <input type="text" class="form-control form-control-lg" id="nric" asp-for="Nric"
+                       placeholder="000000-00-0000" inputmode="numeric" autocomplete="off" required maxlength="14" />
+                <span asp-validation-for="Nric" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="phoneNumber">Phone number</label>
+                <input type="tel" class="form-control form-control-lg" id="phoneNumber" asp-for="PhoneNumber"
+                       placeholder="e.g. 011-37455884" inputmode="tel" autocomplete="tel" required maxlength="12" />
+                <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="hospitalId">Hospital</label>
+                <select class="form-select form-select-lg" id="hospitalId" asp-for="HospitalId" asp-items="Model.HospitalOptions" required>
+                    <option value="">Select hospital…</option>
+                </select>
+                <span asp-validation-for="HospitalId" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="selectedRole">Role</label>
+                <select class="form-select form-select-lg" id="selectedRole" asp-for="SelectedRole" onchange="toggleMmc(this.value)">
+                    <option value="@((int)UserRole.Doctor)">Doctor</option>
+                    <option value="@((int)UserRole.HeadNurse)">Head Nurse</option>
+                    <option value="@((int)UserRole.LabManager)">Lab Manager</option>
+                </select>
+            </div>
+
+            <div class="mb-3" id="mmcField">
+                <label class="form-label" for="mmcNumber">MMC registration number <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-lg" id="mmcNumber" asp-for="MmcNumber"
+                       placeholder="e.g. MMC 12345" maxlength="50" />
+                <span asp-validation-for="MmcNumber" class="text-danger small"></span>
+                <div class="form-text">Required for all practising doctors.</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="password-input">Password</label>
+                <input type="password" class="form-control form-control-lg" id="password-input" asp-for="Password" placeholder="Choose a password" required />
+                <span asp-validation-for="Password" class="text-danger small"></span>
+                <div class="form-text">Must include uppercase, lowercase, a digit, and a symbol (e.g. @@, #, !).</div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label" for="confirm">Confirm password</label>
+                <input type="password" class="form-control form-control-lg" id="confirm" asp-for="ConfirmPassword" required />
+                <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+            </div>
+
+            <button class="btn btn-primary btn-lg w-100" type="submit">Submit registration</button>
+
+            <p class="text-center text-muted mt-4 mb-0">
+                Already have an account? <a href="/account/login">Sign in</a>
+            </p>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function toggleMmc(roleValue) {
+        var doctorValue = '@((int)UserRole.Doctor)';
+        var field = document.getElementById('mmcField');
+        var input = document.getElementById('mmcNumber');
+        var isDoctor = String(roleValue) === String(doctorValue);
+        field.style.display = isDoctor ? '' : 'none';
+        input.required = isDoctor;
+    }
+
+    /** Malaysian NRIC: ######-##-#### */
+    function formatNric(el) {
+        var d = el.value.replace(/\D/g, '').slice(0, 12);
+        if (d.length <= 6) el.value = d;
+        else if (d.length <= 8) el.value = d.slice(0, 6) + '-' + d.slice(6);
+        else el.value = d.slice(0, 6) + '-' + d.slice(6, 8) + '-' + d.slice(8);
+    }
+
+    /** Malaysian mobile: 01X-XXXXXXX or 01X-XXXXXXXX */
+    function formatPhone(el) {
+        var d = el.value.replace(/\D/g, '');
+        if (d.startsWith('60') && d.length > 2) d = '0' + d.slice(2);
+        d = d.slice(0, 11);
+        if (d.length <= 3) el.value = d;
+        else el.value = d.slice(0, 3) + '-' + d.slice(3);
+    }
+
+    (function initFormatters() {
+        var nric = document.getElementById('nric');
+        var phone = document.getElementById('phoneNumber');
+        if (nric) {
+            nric.addEventListener('input', function () { formatNric(nric); });
+            formatNric(nric);
+        }
+        if (phone) {
+            phone.addEventListener('input', function () { formatPhone(phone); });
+            formatPhone(phone);
+        }
+        toggleMmc(document.getElementById('selectedRole').value);
+    })();
+</script>
+}

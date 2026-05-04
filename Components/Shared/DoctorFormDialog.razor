@@ -1,0 +1,97 @@
+<div class="modal fade show lis-modal-shell" tabindex="-1" aria-modal="true" role="dialog" @onclick="Cancel">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable lis-modal-dialog">
+        <div class="modal-content lis-modal-content app-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header border-bottom-0 pb-0">
+                <div>
+                    <h5 class="modal-title mb-1">
+                        <i class="icon-base ti tabler-stethoscope me-2 text-primary"></i>@Title
+                    </h5>
+                    <p class="text-muted mb-0">Capture doctor details for report attribution and communication.</p>
+                </div>
+                <button type="button" class="btn-close lis-modal-close" @onclick="Cancel" aria-label="Close"></button>
+            </div>
+            <div class="modal-body lis-modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Doctor Name</label>
+                        <input class="form-control" @bind="_name" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Hospital</label>
+                        <select class="form-select" @bind="_hospitalId">
+                            @foreach (var h in Hospitals)
+                            {
+                                <option value="@h.Id">@h.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input class="form-control" @bind="_email" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">MMC No.</label>
+                        <input class="form-control" @bind="_mmcNo" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Specialty</label>
+                        <input class="form-control" @bind="_specialty" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Qualifications</label>
+                        <input class="form-control" @bind="_qualifications" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top lis-modal-footer">
+                <button type="button" class="btn btn-label-secondary" @onclick="Cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="Submit">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<Doctor?> OnClose { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public Doctor? ExistingDoctor { get; set; }
+    [Parameter] public List<Hospital> Hospitals { get; set; } = new();
+
+    private string _name = "";
+    private string? _email;
+    private string? _mmcNo;
+    private string? _specialty;
+    private string? _qualifications;
+    private int _hospitalId;
+
+    protected override void OnInitialized()
+    {
+        if (ExistingDoctor != null)
+        {
+            _name = ExistingDoctor.Name;
+            _email = ExistingDoctor.Email;
+            _mmcNo = ExistingDoctor.MMCNo;
+            _specialty = ExistingDoctor.Specialty;
+            _qualifications = ExistingDoctor.Qualifications;
+            _hospitalId = ExistingDoctor.HospitalId;
+        }
+        else if (Hospitals.Any())
+        {
+            _hospitalId = Hospitals.First().Id;
+        }
+    }
+
+    private async Task Cancel() => await OnClose.InvokeAsync(null);
+
+    private async Task Submit()
+    {
+        var doctor = ExistingDoctor ?? new Doctor();
+        doctor.Name = _name;
+        doctor.Email = _email;
+        doctor.MMCNo = _mmcNo;
+        doctor.Specialty = _specialty;
+        doctor.Qualifications = _qualifications;
+        doctor.HospitalId = _hospitalId;
+        await OnClose.InvokeAsync(doctor);
+    }
+}

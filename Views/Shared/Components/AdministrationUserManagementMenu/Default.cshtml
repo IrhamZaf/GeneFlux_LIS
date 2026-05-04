@@ -1,0 +1,52 @@
+@model LIS.ViewComponents.AdministrationUserManagementMenuViewModel
+
+@if (Model.ShowHospitalsLink)
+{
+    <li class="menu-item">
+        <a class="menu-link" href="/Administration/Hospitals">
+            <i class="menu-icon icon-base ti tabler-building-hospital"></i>
+            <div>Hospitals</div>
+        </a>
+    </li>
+}
+
+@if (Model.ShowUserManagementSection)
+{
+    <li class="menu-item@(Model.UserManagementMenuOpen ? " active open" : "")">
+        <a class="menu-link lis-admin-submenu-toggle" href="javascript:void(0);" role="button"
+           onclick="var li=this.closest('.menu-item'); li.classList.toggle('open'); li.classList.toggle('active'); return false;">
+            <i class="menu-icon icon-base ti tabler-user-cog"></i>
+            <div class="d-flex align-items-center justify-content-between flex-grow-1 gap-2 pe-lg-2">
+                <span>User management</span>
+                @if (Model.PendingRegistrationCount > 0)
+                {
+                    <span class="badge rounded-pill bg-danger flex-shrink-0">@Model.PendingRegistrationCount</span>
+                }
+            </div>
+        </a>
+        <ul class="menu-sub">
+            @if (Model.ShowUsersChild)
+            {
+                <li class="menu-item@(Model.UsersActive ? " active" : "")">
+                    <a href="/Administration/Users" class="menu-link">
+                        <div>Users</div>
+                    </a>
+                </li>
+            }
+            @if (Model.ShowStaffRegistrationsChild)
+            {
+                <li class="menu-item@(Model.StaffRegistrationsActive ? " active" : "")">
+                    <a href="/Administration/RegistrationRequests" class="menu-link">
+                        <div class="d-flex align-items-center justify-content-between flex-grow-1 gap-2 w-100">
+                            <span>Staff registrations</span>
+                            @if (Model.PendingRegistrationCount > 0)
+                            {
+                                <span class="badge rounded-pill bg-danger flex-shrink-0">@Model.PendingRegistrationCount</span>
+                            }
+                        </div>
+                    </a>
+                </li>
+            }
+        </ul>
+    </li>
+}

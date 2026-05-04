@@ -1,0 +1,242 @@
+@page
+@model AspnetCoreFull.Pages.CRUD.UserCRUDModel;
+@using AspnetCoreFull.Helpers;
+@using AspnetCoreFull.Models;
+
+
+@{
+  ViewData["Title"] = "UserCRUD";
+
+  @* Calculate percentages and round them to the nearest integer *@
+  int totalUsers = Model.TotalUserCount;
+  int verifiedUsers = Model.VerifiedUserCount;
+  int duplicateUsers = Model.DuplicateUserCount;
+  int unverifiedUsers = Model.UnverifiedUserCount;
+
+  int verifiedUsersPercentage = (totalUsers != 0) ? (int)Math.Round((double)verifiedUsers / totalUsers * 100) : 0;
+  int duplicateUsersPercentage = (totalUsers != 0) ? (int)Math.Round((double)duplicateUsers / totalUsers * 100) : 0;
+  int unverifiedUsersPercentage = (totalUsers != 0) ? (int)Math.Round((double)unverifiedUsers / totalUsers * 100) : 0;
+
+  ViewData["VerifiedUsersPercentage"] = verifiedUsersPercentage;
+  ViewData["DuplicateUsersPercentage"] = duplicateUsersPercentage;
+  ViewData["UnverifiedUsersPercentage"] = unverifiedUsersPercentage;
+
+}
+
+@section VendorStyles {
+  <link rel="stylesheet" href="~/vendor/libs/datatables-bs5/datatables.bootstrap5.dist.css" />
+  <link rel="stylesheet" href="~/vendor/libs/datatables-responsive-bs5/responsive.bootstrap5.dist.css" />
+  <link rel="stylesheet" href="~/vendor/libs/datatables-buttons-bs5/buttons.bootstrap5.dist.css" />
+  <link rel="stylesheet" href="~/vendor/libs/select2/select2.dist.css" />
+  <link rel="stylesheet" href="~/vendor/libs/sweetalert2/sweetalert2.dist.css" />
+  <link rel="stylesheet" href="~/vendor/libs/&#64;form-validation/form-validation.dist.css" />
+}
+
+@section VendorScripts {
+  <script src="~/vendor/libs/moment/moment.dist.js"></script>
+  <script src="~/vendor/libs/datatables-bs5/datatables-bootstrap5.dist.js"></script>
+  <script src="~/vendor/libs/select2/select2.dist.js"></script>
+  <script src="~/vendor/libs/sweetalert2/sweetalert2.dist.js"></script>
+  <script src="~/vendor/libs/&#64;form-validation/popular.dist.js"></script>
+  <script src="~/vendor/libs/&#64;form-validation/bootstrap5.dist.js"></script>
+  <script src="~/vendor/libs/&#64;form-validation/auto-focus.dist.js"></script>
+  <script src="~/vendor/libs/cleave-zen/cleave-zen.dist.js"></script>
+}
+
+@section PageScripts {
+  <script src="~/js/user-crud.dist.js"></script>
+}
+
+@* User Analytics Widget *@
+<div class="row g-6 mb-6">
+  @* Total Users *@
+  <div class="col-sm-6 col-xl-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between">
+          <div class="content-left">
+            <span class="text-heading">Session</span>
+            <div class="d-flex align-items-center my-1">
+              <h4 class="mb-0 me-2">@Model.TotalUserCount</h4>
+              <p class="text-success mb-0">(+100%)</p>
+            </div>
+            <small class="mb-0">Total Users</small>
+          </div>
+          <div class="avatar">
+            <span class="avatar-initial rounded bg-label-primary">
+              <i class="icon-base ti tabler-users icon-26px"></i>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  @* Verified Users *@
+  <div class="col-sm-6 col-xl-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between">
+          <div class="content-left">
+            <span class="text-heading">Paid Users</span>
+            <div class="d-flex align-items-center my-1">
+              <h4 class="mb-0 me-2">@Model.VerifiedUserCount</h4>
+              <p class="text-success mb-0">( +@ViewData["VerifiedUsersPercentage"]% )</p>
+            </div>
+            <small class="mb-0">Last week analytics </small>
+          </div>
+          <div class="avatar">
+            <span class="avatar-initial rounded bg-label-danger">
+              <i class="icon-base ti tabler-user-plus icon-26px"></i>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  @* Duplicate Users *@
+  <div class="col-sm-6 col-xl-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between">
+          <div class="content-left">
+            <span class="text-heading">Active Users</span>
+            <div class="d-flex align-items-center my-1">
+              <h4 class="mb-0 me-2">@Model.DuplicateUserCount</h4>
+              <p class="text-danger mb-0">( +@ViewData["DuplicateUsersPercentage"]% )</p>
+            </div>
+            <small class="mb-0">Last week analytics</small>
+          </div>
+          <div class="avatar">
+            <span class="avatar-initial rounded bg-label-success">
+              <i class="icon-base ti tabler-user-check icon-26px"></i>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  @* Unverified Users *@
+  <div class="col-sm-6 col-xl-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between">
+          <div class="content-left">
+            <span class="text-heading">Pending Users</span>
+            <div class="d-flex align-items-center my-1">
+              <h4 class="mb-0 me-2">@Model.UnverifiedUserCount</h4>
+              <p class="text-success mb-0">( +@ViewData["UnverifiedUsersPercentage"]% )</p>
+            </div>
+            <small class="mb-0">Last week analytics</small>
+          </div>
+          <div class="avatar">
+            <span class="avatar-initial rounded bg-label-warning">
+              <i class="icon-base ti tabler-user-search icon-26px"></i>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@* Users DataTable *@
+@if (Model.Users != null && Model.Users.Count > 0)
+{
+  <div class="card">
+  <div class="card-header">
+    <h5 class="card-title mb-0">Search Filter</h5>
+  </div>
+  <div class="card-datatable table-responsive border-top">
+    <table id="userTable" class="table">
+      <thead class="border-top">
+        <tr>
+          <th></th>
+          <th>Id</th>
+          <th>User</th>
+          <th>Email</th>
+          <th>Verified</th>
+          <th>Contact</th>
+          <th>Role</th>
+          <th>Plan</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach (var user in Model.Users)
+          {
+            <tr>
+              <td></td>
+              <td>@user.Id</td>
+              <td class="user-name text-nowrap">@Html.Raw(UserCRUDHelpers.GenerateUserAvatar(user))</td>
+              <td class="text-truncate">@user.Email</td>
+              <td>@if (user.IsVerified)
+                {
+                  <i class='icon-base ti fs-4 tabler-shield text-success'><span class="d-none">1</span></i>
+                }
+                else
+                {
+                  <i class="icon-base ti fs-4 tabler-shield-x text-danger"><span class="d-none">0</span></i>
+                }
+                <input type="hidden" class="user-verified-@user.Id" data-is-verified="@user.IsVerified" />
+              </td>
+              <td class="text-nowrap">@UserCRUDHelpers.FormatUSPhoneNumber(user.ContactNumber)</td>
+              <td class="text-capitalize text-heading">@user.SelectedRole</td>
+              <td class="text-capitalize text-heading">@user.SelectedPlan</td>
+              <td class="text-nowrap">
+                @* Edit Button *@
+                <button class="btn btn-icon edit-user-button" data-bs-toggle="offcanvas"
+                  data-bs-target="#editUserOffcanvas" id="@user.Id-editUser"><i class="icon-base ti tabler-edit icon-22px"></i></button>
+                @* Delete Button *@
+                <form method="post" asp-page-handler="Delete" asp-route-id="@user.Id" id="@user.Id-deleteForm"
+                  onsubmit="showSuccessAlert('Deleted');" class="d-inline">
+                  <button class="btn btn-icon" id="@user.Id-deleteUser" onclick="showDeleteConfirmation('@user.Id')">
+                    <i class="icon-base ti tabler-trash icon-22px"></i>
+                  </button>
+                </form>
+                @* Dropdown Button *@
+                <button class="btn btn-icon dropdown-toggle hide-arrow" data-bs-toggle="dropdown"><i
+                    class="icon-base ti tabler-dots-vertical icon-22px"></i></button>
+                <div class="dropdown-menu dropdown-menu-end m-0">
+                  <a href="/Apps/Users/View/Account" class="dropdown-item">View</a>
+                  <a href="javascript:;" class="dropdown-item">Suspend</a>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}
+else
+{
+  <div class="card">
+  <div class="card-header">
+    <h5 class="card-title mb-0">Search Filter</h5>
+  </div>
+  <div class="card-datatable table-responsive border-top">
+    <table id="userTable" class="table">
+      <thead class="border-top">
+        <tr>
+          <th></th>
+          <th>Id</th>
+          <th>User</th>
+          <th>Email</th>
+          <th>Verified</th>
+          <th>Contact</th>
+          <th>Role</th>
+          <th>Plan</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+}
+
+
+@* Create User Form Offcanvas Partial*@
+@await Html.PartialAsync("partials/_CreatUserOffcanvasPartial")
+
+@* Edit User Form Offcanvas Partial*@
+@await Html.PartialAsync("partials/_EditUserOffcanvasPartial")

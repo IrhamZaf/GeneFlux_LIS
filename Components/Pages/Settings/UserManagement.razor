@@ -1,0 +1,148 @@
+@page "/settings/users"
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject UserService UserService
+@inject DropdownService DropdownService
+
+<PageTitle>User Management - Geneflux LIS</PageTitle>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Total Accounts</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <h4 class="fs-22 fw-semibold mb-0">@TotalUsers</h4>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-primary">
+                            <i class="icon-base ti tabler-users"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Doctors</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <h4 class="fs-22 fw-semibold mb-0">@_doctorUsers.Count</h4>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-success">
+                            <i class="icon-base ti tabler-stethoscope"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Operational Staff</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <h4 class="fs-22 fw-semibold mb-0">@(_labManagerUsers.Count + _nurseUsers.Count + _adminUsers.Count)</h4>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-info">
+                            <i class="icon-base ti tabler-shield-check"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <p class="text-uppercase fw-medium text-muted text-truncate mb-3">Hospitals Linked</p>
+                <div class="d-flex align-items-center justify-content-between">
+                    <h4 class="fs-22 fw-semibold mb-0">@_hospitals.Count</h4>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-warning">
+                            <i class="icon-base ti tabler-building-hospital"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header border-0">
+        <div class="d-flex align-items-center mb-3">
+            <div class="flex-grow-1">
+                <h4 class="card-title mb-1">Account Directories</h4>
+                <p class="text-muted mb-0">Browse user groups by role and manage access with the new Vuexy-based directory view.</p>
+            </div>
+        </div>
+        <ul class="nav nav-pills gap-2" role="tablist">
+            @foreach (var tab in _tabs)
+            {
+                <li class="nav-item">
+                    <button type="button"
+                            class="nav-link @(tab.Key == _activeTab ? "active" : null)"
+                            @onclick="() => _activeTab = tab.Key">
+                        <i class="@tab.Icon me-1"></i>@tab.Label
+                    </button>
+                </li>
+            }
+        </ul>
+    </div>
+    <div class="card-body">
+        @switch (_activeTab)
+        {
+            case "doctor":
+                <UserTable Role="UserRole.Doctor" Users="_doctorUsers" OnRefresh="LoadUsers" Hospitals="_hospitals" />
+                break;
+            case "lab":
+                <UserTable Role="UserRole.LabManager" Users="_labManagerUsers" OnRefresh="LoadUsers" Hospitals="_hospitals" />
+                break;
+            case "nurse":
+                <UserTable Role="UserRole.HeadNurse" Users="_nurseUsers" OnRefresh="LoadUsers" Hospitals="_hospitals" />
+                break;
+            case "admin":
+                <UserTable Role="UserRole.LabAdmin" Users="_adminUsers" OnRefresh="LoadUsers" Hospitals="_hospitals" />
+                break;
+            case "super":
+                <UserTable Role="UserRole.SuperAdmin" Users="_superAdminUsers" OnRefresh="LoadUsers" Hospitals="_hospitals" />
+                break;
+        }
+    </div>
+</div>
+
+@code {
+    private readonly (string Key, string Label, string Icon)[] _tabs =
+    [
+        ("doctor", "Doctors", "icon-base ti tabler-stethoscope"),
+        ("lab", "Lab Managers", "icon-base ti tabler-flask"),
+        ("nurse", "Head Nurses", "icon-base ti tabler-heartbeat"),
+        ("admin", "Lab Admins", "icon-base ti tabler-shield-check"),
+        ("super", "Super Admins", "icon-base ti tabler-crown")
+    ];
+
+    private string _activeTab = "doctor";
+    private List<ApplicationUser> _doctorUsers = new();
+    private List<ApplicationUser> _labManagerUsers = new();
+    private List<ApplicationUser> _nurseUsers = new();
+    private List<ApplicationUser> _adminUsers = new();
+    private List<ApplicationUser> _superAdminUsers = new();
+    private List<Hospital> _hospitals = new();
+    private int TotalUsers => _doctorUsers.Count + _labManagerUsers.Count + _nurseUsers.Count + _adminUsers.Count + _superAdminUsers.Count;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hospitals = await DropdownService.GetHospitalsAsync();
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        _doctorUsers = await UserService.GetUsersByRoleAsync(UserRole.Doctor);
+        _labManagerUsers = await UserService.GetUsersByRoleAsync(UserRole.LabManager);
+        _nurseUsers = await UserService.GetUsersByRoleAsync(UserRole.HeadNurse);
+        _adminUsers = await UserService.GetUsersByRoleAsync(UserRole.LabAdmin);
+        _superAdminUsers = await UserService.GetUsersByRoleAsync(UserRole.SuperAdmin);
+        StateHasChanged();
+    }
+}

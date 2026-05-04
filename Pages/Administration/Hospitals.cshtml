@@ -1,0 +1,66 @@
+@page
+@model LIS.Pages.Administration.HospitalsModel
+@{
+    ViewData["Title"] = "Hospitals Management";
+}
+
+<div class="card">
+    <div class="card-header border-0">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+            <div>
+                <h4 class="card-title mb-1">Hospitals List</h4>
+                <p class="text-muted mb-0">Maintain facilities used by LIS reports and patient records.</p>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm">
+                <i class="icon-base ti tabler-plus me-1"></i>Add Hospital
+            </button>
+        </div>
+    </div>
+
+    <div class="card-body pt-0">
+        <div class="card-datatable table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Hospitals)
+                    {
+                        <tr>
+                            <td><h6 class="mb-0">@item.Name</h6></td>
+                            <td>@item.Address</td>
+                            <td>
+                                @if (item.IsActive)
+                                {
+                                    <span class="badge bg-label-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-label-danger">Inactive</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-icon btn-text-secondary rounded-pill" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="icon-base ti tabler-dots-vertical"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><a class="dropdown-item" href="#"><i class="icon-base ti tabler-edit me-2"></i>Edit</a></li>
+                                        <li><a class="dropdown-item" href="#"><i class="icon-base ti tabler-report-medical me-2"></i>View Reports</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-danger" href="#"><i class="icon-base ti tabler-building-off me-2"></i>Deactivate</a></li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

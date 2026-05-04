@@ -1,0 +1,58 @@
+<div class="modal fade show lis-modal-shell" tabindex="-1" aria-modal="true" role="dialog" @onclick="Cancel">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable lis-modal-dialog">
+        <div class="modal-content lis-modal-content app-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header border-bottom-0 pb-0">
+                <div>
+                    <h5 class="modal-title mb-1">
+                        <i class="icon-base ti tabler-edit me-2 text-primary"></i>@Title
+                    </h5>
+                    <p class="text-muted mb-0">Update the details below and save your changes.</p>
+                </div>
+                <button type="button" class="btn-close lis-modal-close" @onclick="Cancel" aria-label="Close"></button>
+            </div>
+            <div class="modal-body lis-modal-body">
+                <div class="lis-modal-stack">
+                    @foreach (var field in Fields)
+                    {
+                        <div>
+                            <label class="form-label">@FormatLabel(field)</label>
+                            <input class="form-control"
+                                   value="@GetValue(field)"
+                                   @oninput="e => SetValue(field, e.Value?.ToString())" />
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer border-top lis-modal-footer">
+                <button type="button" class="btn btn-label-secondary" @onclick="Cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="Submit">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<Dictionary<string, string>?> OnClose { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string[] Fields { get; set; } = Array.Empty<string>();
+    [Parameter] public Dictionary<string, string> Values { get; set; } = new();
+
+    private Dictionary<string, string> _values = new();
+
+    protected override void OnInitialized()
+    {
+        _values = new Dictionary<string, string>(Values);
+    }
+
+    private string GetValue(string field) => _values.TryGetValue(field, out var value) ? value : string.Empty;
+
+    private void SetValue(string field, string? value) => _values[field] = value ?? string.Empty;
+
+    private string FormatLabel(string field)
+    {
+        return string.Concat(field.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + c : c.ToString()));
+    }
+
+    private async Task Cancel() => await OnClose.InvokeAsync(null);
+    private async Task Submit() => await OnClose.InvokeAsync(_values);
+}

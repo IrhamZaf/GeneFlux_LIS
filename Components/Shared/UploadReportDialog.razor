@@ -1,0 +1,711 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+@using LIS.Services
+@inject PatientService PatientService
+@inject DropdownService DropdownService
+@inject ReportService ReportService
+@inject ReportUploadService ReportUploadService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<div class="modal fade show lis-modal-shell" tabindex="-1" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable lis-modal-dialog lis-upload-dialog">
+        <div class="modal-content lis-modal-content" @onclick:stopPropagation="true">
+
+            @* ── Confirmation overlay ── *@
+            @if (_confirmAction != null)
+            {
+                <div class="lis-confirm-overlay">
+                    <div class="lis-confirm-card">
+                        <div class="text-center mb-3">
+                            <div class="lis-confirm-icon @(_confirmAction switch { ConfirmAction.Submit => "bg-label-primary", ConfirmAction.Approve => "bg-label-success", ConfirmAction.Reject => "bg-label-warning", _ => "bg-label-secondary" })">
+                                <i class="icon-base ti @(_confirmAction switch { ConfirmAction.Submit => "tabler-send", ConfirmAction.Approve => "tabler-circle-check", ConfirmAction.Reject => "tabler-arrow-back-up", _ => "tabler-device-floppy" }) fs-3"></i>
+                            </div>
+                        </div>
+                        <h5 class="text-center mb-2">
+                            @(_confirmAction switch
+                            {
+                                ConfirmAction.Submit  => "Submit for Review?",
+                                ConfirmAction.Approve => "Approve this Report?",
+                                ConfirmAction.Reject  => "Reject to Draft?",
+                                _                    => "Save as Draft?"
+                            })
+                        </h5>
+                        <p class="text-muted text-center mb-4">
+                            @if (_confirmAction == ConfirmAction.Submit)
+                            {
+                                <span>This report will be sent for review. You won't be able to edit it until it's returned.</span>
+                            }
+                            else if (_confirmAction == ConfirmAction.Approve)
+                            {
+                                <span>The report will be marked as Approved and made available for download.</span>
+                            }
+                            else if (_confirmAction == ConfirmAction.Reject)
+                            {
+                                <span>The report will be returned to Draft. The uploader can revise and resubmit.</span>
+                            }
+                            else
+                            {
+                                <span>The report will be saved as a draft. You can continue editing it later.</span>
+                            }
+                        </p>
+                        <div class="d-flex justify-content-center gap-3">
+                            <button type="button" class="btn btn-label-secondary px-4" @onclick="CancelConfirm">Go Back</button>
+                            @if (_confirmAction == ConfirmAction.Submit)
+                            {
+                                <button type="button" class="btn btn-primary px-4" @onclick="ConfirmSubmitForReview" disabled="@_saving">
+                                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                    Confirm &amp; Submit
+                                </button>
+                            }
+                            else if (_confirmAction == ConfirmAction.Approve)
+                            {
+                                <button type="button" class="btn btn-success px-4" @onclick="ConfirmApprove" disabled="@_saving">
+                                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                    Confirm &amp; Approve
+                                </button>
+                            }
+                            else if (_confirmAction == ConfirmAction.Reject)
+                            {
+                                <button type="button" class="btn btn-warning px-4" @onclick="ConfirmReject" disabled="@_saving">
+                                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                    Confirm &amp; Reject
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-dark px-4" @onclick="ConfirmSaveDraft" disabled="@_saving">
+                                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                    Confirm &amp; Save
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="modal-header border-bottom pb-3">
+                <div>
+                    <h5 class="modal-title mb-1">
+                        <i class="icon-base ti @(ReadOnly ? "tabler-eye" : "tabler-upload") me-2 text-primary"></i>@DialogTitle
+                    </h5>
+                    <p class="text-muted mb-0 small">@DialogSubtitleActive</p>
+                </div>
+                <button type="button" class="btn-close lis-modal-close" @onclick="Cancel" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body p-0 lis-upload-modal-body" style="overflow: hidden;">
+                @if (!ShowMetadataForm)
+                {
+                    @* Step 1: upload PDF only (no form yet) *@
+                    <div class="lis-upload-split lis-upload-split--stage-upload">
+                        <div class="lis-upload-drop-pane" @ondragover:preventDefault @ondrop:preventDefault>
+                            <div class="lis-upload-drop-zone">
+                                @if (_extracting)
+                                {
+                                    <div class="lis-upload-drop-hint d-flex flex-column align-items-center text-muted py-5">
+                                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                                        <span class="fw-medium">Processing PDF&hellip;</span>
+                                        <span class="small mt-1">Detecting report details</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <InputFile OnChange="OnFileSelected"
+                                               accept=".pdf,application/pdf"
+                                               class="lis-upload-file-input" />
+                                    <div class="lis-upload-drop-hint text-center px-4 py-5">
+                                        <i class="icon-base ti tabler-cloud-upload fs-1 text-primary mb-3 d-block opacity-75"></i>
+                                        <span class="fw-semibold d-block mb-1">Drop your report PDF here</span>
+                                        <span class="text-muted small d-block mb-3">or click anywhere in this area to browse</span>
+                                        <span class="badge bg-label-secondary">PDF only</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column flex-lg-row lis-upload-split">
+
+                        @* LEFT: PDF preview *@
+                        <div class="lis-upload-pdf-pane d-none d-lg-flex">
+                            @if (!string.IsNullOrWhiteSpace(PdfViewerUrl))
+                            {
+                                <iframe src="@PdfViewerUrl" class="w-100 h-100 border-0" title="Report PDF preview"></iframe>
+                            }
+                            else if (_extracting)
+                            {
+                                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
+                                    <div class="spinner-border text-primary mb-3" role="status"></div>
+                                    <span>Processing PDF&hellip;</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted px-4 text-center">
+                                    <i class="icon-base ti tabler-file-type-pdf fs-1 mb-3 opacity-25"></i>
+                                    <span>No PDF preview</span>
+                                </div>
+                            }
+                        </div>
+
+                        @* RIGHT: form *@
+                        <div class="lis-upload-form-pane">
+
+                        @if (!ReadOnly)
+                        {
+                            <div class="card border-0 bg-light mb-4">
+                                <div class="card-body py-3 px-3">
+                                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                                        <div class="d-flex align-items-center gap-2 text-truncate">
+                                            <i class="icon-base ti tabler-paperclip text-primary"></i>
+                                            <span class="fw-medium text-truncate">
+                                                @if (_extracting)
+                                                {
+                                                    <span>Detecting report details...</span>
+                                                }
+                                                else
+                                                {
+                                                    @(_selectedFile?.Name ?? _uploadedFileName ?? "No file selected")
+                                                }
+                                            </span>
+                                        </div>
+                                        <label class="btn btn-label-primary btn-sm mb-0 flex-shrink-0" @onclick:stopPropagation="true">
+                                            <i class="icon-base ti tabler-upload me-1"></i>Change PDF
+                                            <InputFile OnChange="OnFileSelected" accept=".pdf,application/pdf" class="d-none" />
+                                        </label>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(_extractionMessage))
+                                    {
+                                        <div class="alert alert-info py-2 px-3 mt-2 mb-0 small">@_extractionMessage</div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_uploadedFileName))
+                        {
+                            <div class="alert alert-secondary mb-4 d-flex align-items-center gap-2">
+                                <i class="icon-base ti tabler-file-type-pdf"></i>
+                                <span class="fw-semibold text-truncate">@_uploadedFileName</span>
+                            </div>
+                        }
+
+                        @* On small screens show an inline PDF viewer toggle *@
+                        @if (!string.IsNullOrWhiteSpace(PdfViewerUrl))
+                        {
+                            <div class="d-lg-none mb-3">
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100" @onclick="() => _showPdfViewer = !_showPdfViewer">
+                                    <i class="icon-base ti tabler-file-type-pdf me-1"></i>@(_showPdfViewer ? "Hide PDF" : "View PDF")
+                                </button>
+                                @if (_showPdfViewer)
+                                {
+                                    <div class="border rounded mt-2 bg-white" style="height: 400px;">
+                                        <iframe src="@PdfViewerUrl" class="w-100 h-100 border-0 rounded" title="Report PDF preview"></iframe>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <fieldset class="border rounded p-3 mb-3">
+                            <legend class="form-section-title float-none w-auto px-2 fs-6 mb-0">Laboratory Information</legend>
+                            <div class="row g-3 mt-1">
+                                <div class="col-sm-6">
+                                    <label class="form-label">Reference Number</label>
+                                    <input class="form-control" @bind="_referenceNumber" placeholder="e.g. GF/EP_279" disabled="@ReadOnly" />
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label">Hospital Name</label>
+                                    <select class="form-select" @bind="_hospitalId" @bind:after="OnHospitalChangedAsync" disabled="@ReadOnly">
+                                        <option value="">Select hospital</option>
+                                        @foreach (var h in _hospitals)
+                                        {
+                                            <option value="@h.Id">@h.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label">Doctor Name</label>
+                                    <select class="form-select" @bind="_doctorId" disabled="@ReadOnly">
+                                        <option value="">Select doctor</option>
+                                        @foreach (var d in _doctors)
+                                        {
+                                            <option value="@d.Id">@d.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label">Reporting Time &amp; Date</label>
+                                    <input type="datetime-local" class="form-control" value="@ReportDateInput" @onchange="OnReportDateInputChanged" disabled="@ReadOnly" />
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="border rounded p-3 mb-3">
+                            <legend class="form-section-title float-none w-auto px-2 fs-6 mb-0">Patient Information</legend>
+                            <div class="row g-3 mt-1">
+                                <div class="col-sm-6">
+                                    <label class="form-label">Patient Name</label>
+                                    <input class="form-control" @bind="_patientName" placeholder="Enter full name" disabled="@ReadOnly" />
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label">Patient NRIC</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           placeholder="000000-00-0000"
+                                           inputmode="numeric"
+                                           maxlength="14"
+                                           autocomplete="off"
+                                           value="@_nric"
+                                           @oninput="OnNricFieldInput"
+                                           disabled="@ReadOnly" />
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="form-label">MRN Number</label>
+                                    <input class="form-control" @bind="_mrn" placeholder="MRN-XXXXX" disabled="@ReadOnly" />
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="form-label">Sex</label>
+                                    <select class="form-select" @bind="_sex" disabled="@ReadOnly">
+                                        <option value="0">Male</option>
+                                        <option value="1">Female</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="border rounded p-3 mb-3">
+                            <legend class="form-section-title float-none w-auto px-2 fs-6 mb-0">Specimen</legend>
+                            <p class="text-muted small mb-2">Specimen description is taken from the uploaded report.</p>
+                            <div class="row g-3">
+                                <div class="col-sm-4">
+                                    <label class="form-label">Specimen</label>
+                                    <div class="rounded border bg-label-light px-3 py-2 text-body">
+                                        @(string.IsNullOrWhiteSpace(_specimenType) ? "—" : _specimenType)
+                                    </div>
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="form-label">Collection date</label>
+                                    <input type="date" class="form-control" @bind="_sampleCollectionDate" disabled="@ReadOnly" />
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="form-label">Received date</label>
+                                    <input type="date" class="form-control" @bind="_receivedAtLabDate" disabled="@ReadOnly" />
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="border rounded p-3">
+                            <legend class="form-section-title float-none w-auto px-2 fs-6 mb-0">Test Details</legend>
+                            <div class="row g-3 mt-1">
+                                <div class="col-sm-6">
+                                    <label class="form-label">Test Name</label>
+                                    <select class="form-select" @bind="_testId" disabled="@ReadOnly">
+                                        <option value="">Select test type</option>
+                                        @foreach (var t in _tests)
+                                        {
+                                            <option value="@t.Id">@t.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+                }
+
+            </div>
+
+            <div class="modal-footer border-top lis-modal-footer lis-upload-modal-footer">
+                <button type="button" class="btn btn-label-secondary" @onclick="Cancel">@(ReadOnly ? "Close" : "Cancel")</button>
+
+                @if (ReadOnly && ExistingReport?.Status == ReportStatus.PendingReview)
+                {
+                    <div class="ms-auto d-inline-flex align-items-center gap-2 flex-nowrap">
+                        @if (CanReject)
+                        {
+                            <button type="button" class="btn btn-label-warning" @onclick="RequestReject" disabled="@_saving">
+                                <i class="icon-base ti tabler-arrow-back-up me-1"></i>Reject to Draft
+                            </button>
+                        }
+                        @if (CanApprove)
+                        {
+                            <button type="button" class="btn btn-success px-4" @onclick="RequestApprove" disabled="@_saving">
+                                @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                <i class="icon-base ti tabler-circle-check me-1"></i>Approve Report
+                            </button>
+                        }
+                    </div>
+                }
+                else if (!ReadOnly && ShowMetadataForm)
+                {
+                    <div class="ms-auto d-inline-flex align-items-center lis-upload-save-submit flex-nowrap">
+                        <button type="button" class="btn btn-label-dark" @onclick="RequestSaveDraft">
+                            <i class="icon-base ti tabler-device-floppy me-1"></i>Save Upload Draft
+                        </button>
+                        <button type="button" class="btn btn-primary" @onclick="RequestSubmitForReview">
+                            <i class="icon-base ti tabler-send me-1"></i>Submit for Review
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<bool> OnClose { get; set; }
+    [Parameter] public Report? ExistingReport { get; set; }
+    [Parameter] public ApplicationUser? CurrentUser { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool CanApprove { get; set; }
+    [Parameter] public bool CanReject { get; set; }
+    [Parameter] public EventCallback<int> OnApprove { get; set; }
+    [Parameter] public EventCallback<int> OnReject { get; set; }
+
+    private bool IsEdit => ExistingReport != null;
+    private string DialogTitle => ReadOnly
+        ? ExistingReport?.Status == ReportStatus.PendingReview ? "Review Uploaded Report" : "View Uploaded Report"
+        : IsEdit ? "Edit Uploaded Draft" : "Upload Report";
+    private string DialogSubtitleActive
+    {
+        get
+        {
+            if (ReadOnly)
+                return "Review uploaded report metadata, patient details, and matching test type.";
+            if (!ShowMetadataForm)
+                return "Drop your PDF here or click to browse. We'll extract details next.";
+            if (IsEdit)
+                return "Upload the PDF, auto-detect the report details, then confirm anything that needs correction.";
+            return "Review detected fields and correct anything before saving or submitting.";
+        }
+    }
+
+    /// <summary>Show laboratory/patient form after a PDF is linked (new upload) or when viewing/editing an existing record.</summary>
+    private bool ShowMetadataForm =>
+        ReadOnly || IsEdit || !string.IsNullOrWhiteSpace(_uploadedFilePath);
+
+    private List<Hospital> _hospitals = new();
+    private List<Doctor> _doctors = new();
+    private List<Test> _tests = new();
+
+    private int? _hospitalId;
+    private int? _doctorId;
+    private string _patientName = string.Empty;
+    private string? _nric;
+    private string? _mrn;
+    private int? _testId;
+    private string? _specimenType;
+    private int _sex;
+    private DateTime? _sampleCollectionDate;
+    private DateTime? _receivedAtLabDate;
+    private DateTime? _reportDate;
+    private IBrowserFile? _selectedFile;
+    private string? _uploadedFilePath;
+    private string? _uploadedFileName;
+    private string? _extractionMessage;
+    private string? _referenceNumber;
+    private bool _extracting;
+    private bool _showPdfViewer;
+    private bool _saving;
+
+    private ConfirmAction? _confirmAction;
+
+    private enum ConfirmAction { Draft, Submit, Approve, Reject }
+
+    private string? PdfViewerUrl =>
+        string.IsNullOrWhiteSpace(_uploadedFilePath)
+            ? null
+            : $"{Navigation.BaseUri.TrimEnd('/')}/api/report-files/view?path={Uri.EscapeDataString(_uploadedFilePath.Replace('\\', '/'))}";
+
+    private string ReportDateInput
+    {
+        get => _reportDate?.ToString("yyyy-MM-ddTHH:mm") ?? string.Empty;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _reportDate = null;
+                return;
+            }
+
+            if (DateTime.TryParse(value, out var parsed))
+                _reportDate = parsed;
+        }
+    }
+
+    private void OnReportDateInputChanged(ChangeEventArgs args)
+    {
+        ReportDateInput = args.Value?.ToString() ?? string.Empty;
+    }
+
+    private void OnNricFieldInput(ChangeEventArgs e)
+    {
+        var formatted = PatientIdentityNormalizer.FormatNricInput(e.Value?.ToString());
+        _nric = string.IsNullOrWhiteSpace(formatted) ? null : formatted;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hospitals = await DropdownService.GetHospitalsAsync();
+        _tests = await DropdownService.GetTestsAsync();
+
+        if (IsEdit && ExistingReport != null)
+        {
+            _hospitalId = ExistingReport.HospitalId;
+            _doctorId = ExistingReport.DoctorId;
+            _testId = ExistingReport.TestId;
+            _specimenType = ExistingReport.SpecimenType;
+            _sampleCollectionDate = ExistingReport.SampleCollectionDate;
+            _receivedAtLabDate = ExistingReport.ReceivedAtLabDate;
+            _reportDate = ExistingReport.ReportingDate ?? ExistingReport.ApprovedAt;
+            _referenceNumber = ExistingReport.ReferenceNumber;
+            _uploadedFilePath = ExistingReport.ReportFilePath;
+            _uploadedFileName = ExistingReport.ReportOriginalFileName
+                ?? (string.IsNullOrWhiteSpace(ExistingReport.ReportFilePath) ? null : Path.GetFileName(ExistingReport.ReportFilePath));
+
+            if (ExistingReport.Patient != null)
+            {
+                _patientName = ExistingReport.Patient.Name;
+                _nric = ExistingReport.Patient.NRIC;
+                _mrn = ExistingReport.Patient.MRN;
+                _sex = (int)ExistingReport.Patient.Sex;
+            }
+
+            _doctors = await DropdownService.GetDoctorsForHospitalDropdownAsync(
+                ExistingReport.HospitalId,
+                ExistingReport.DoctorId);
+        }
+        else
+        {
+            _doctors = await DropdownService.GetDoctorsAsync();
+        }
+    }
+
+    private async Task OnHospitalChangedAsync()
+    {
+        if (ReadOnly)
+            return;
+
+        if (_hospitalId.HasValue)
+        {
+            _doctors = await DropdownService.GetDoctorsAsync(_hospitalId);
+            if (_doctorId.HasValue && _doctors.All(d => d.Id != _doctorId))
+                _doctorId = null;
+        }
+        else
+        {
+            _doctors = await DropdownService.GetDoctorsAsync();
+        }
+    }
+
+    private Task OnFileSelected(InputFileChangeEventArgs args)
+    {
+        _selectedFile = args.File;
+        return ExtractFromUpload();
+    }
+
+    private async Task ExtractFromUpload()
+    {
+        if (_selectedFile == null)
+            return;
+
+        try
+        {
+            _extracting = true;
+            var uploadResult = await ReportUploadService.SaveAndExtractAsync(_selectedFile);
+            _uploadedFilePath = uploadResult.RelativePath;
+            _uploadedFileName = uploadResult.OriginalFileName;
+            ApplyExtractedData(uploadResult.ExtractedData);
+
+            _extractionMessage = "Auto-detection completed. Please review the detected values before saving.";
+        }
+        catch (Exception ex)
+        {
+            _extractionMessage = null;
+            ToastService.ShowToast(ex.Message, ToastLevel.Error);
+        }
+        finally
+        {
+            _extracting = false;
+        }
+    }
+
+    private void ApplyExtractedData(ExtractedReportData data)
+    {
+        _referenceNumber = data.ReferenceNumber;
+        _hospitalId = data.HospitalId ?? _hospitalId;
+        _doctorId = data.DoctorId ?? _doctorId;
+        _patientName = data.PatientName ?? _patientName;
+        _nric = data.NricOrPassport ?? _nric;
+        _mrn = data.Mrn ?? _mrn;
+        _sex = (int)data.Sex;
+        _testId = data.TestId ?? _testId;
+        _specimenType = data.SpecimenType ?? _specimenType;
+        _sampleCollectionDate = data.CollectedDate ?? _sampleCollectionDate;
+        _receivedAtLabDate = data.ReceivedDate ?? _receivedAtLabDate;
+        _reportDate = data.ReportDate ?? _reportDate;
+    }
+
+    private Task Cancel() => OnClose.InvokeAsync(false);
+
+    // ── Confirmation flow ──
+
+    private bool ValidateFields()
+    {
+        if (CurrentUser == null)
+        {
+            ToastService.ShowToast("User session could not be resolved.", ToastLevel.Error);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_uploadedFilePath) && !IsEdit)
+        {
+            ToastService.ShowToast("Please upload the report PDF before saving.", ToastLevel.Warning);
+            return false;
+        }
+
+        if (!_hospitalId.HasValue || !_doctorId.HasValue || !_testId.HasValue || string.IsNullOrWhiteSpace(_patientName))
+        {
+            ToastService.ShowToast("Please review and complete all required detected fields.", ToastLevel.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void RequestSaveDraft()
+    {
+        if (!ValidateFields()) return;
+        _confirmAction = ConfirmAction.Draft;
+    }
+
+    private void RequestSubmitForReview()
+    {
+        if (!ValidateFields()) return;
+        _confirmAction = ConfirmAction.Submit;
+    }
+
+    private void CancelConfirm() => _confirmAction = null;
+
+    private void RequestApprove() => _confirmAction = ConfirmAction.Approve;
+    private void RequestReject()  => _confirmAction = ConfirmAction.Reject;
+
+    private async Task ConfirmApprove()
+    {
+        if (ExistingReport == null) return;
+        _saving = true;
+        try { await OnApprove.InvokeAsync(ExistingReport.Id); }
+        finally { _saving = false; _confirmAction = null; }
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (ExistingReport == null) return;
+        _saving = true;
+        try { await OnReject.InvokeAsync(ExistingReport.Id); }
+        finally { _saving = false; _confirmAction = null; }
+    }
+
+    private async Task ConfirmSaveDraft()
+    {
+        await SaveReport(submitForReview: false);
+    }
+
+    private async Task ConfirmSubmitForReview()
+    {
+        await SaveReport(submitForReview: true);
+    }
+
+    private async Task SaveReport(bool submitForReview = false)
+    {
+        if (CurrentUser == null) return;
+
+        _saving = true;
+        try
+        {
+            var demo = new Patient
+            {
+                Name = _patientName.Trim(),
+                IdentityType = IdentityType.NRIC,
+                NRIC = _nric?.Trim(),
+                PassportNo = null,
+                MRN = string.IsNullOrWhiteSpace(_mrn) ? null : _mrn.Trim(),
+                Sex = (Sex)_sex
+            };
+
+            Patient patient;
+            if (IsEdit && ExistingReport != null && ExistingReport.PatientId > 0)
+                patient = await PatientService.UpdatePatientDemographicsAsync(ExistingReport.PatientId, demo);
+            else
+                patient = await PatientService.ResolveOrCreatePatientForReportAsync(demo, _hospitalId!.Value);
+
+            Report savedReport;
+            Report? reportToEdit = ExistingReport;
+
+            if (reportToEdit != null)
+            {
+                reportToEdit.ReferenceNumber = _referenceNumber ?? reportToEdit.ReferenceNumber;
+                reportToEdit.HospitalId = _hospitalId!.Value;
+                reportToEdit.DoctorId = _doctorId!.Value;
+                reportToEdit.PatientId = patient.Id;
+                reportToEdit.TestId = _testId!.Value;
+                reportToEdit.SpecimenType = _specimenType;
+                reportToEdit.SampleCollectionDate = _sampleCollectionDate;
+                reportToEdit.ReceivedAtLabDate = _receivedAtLabDate;
+                reportToEdit.ReportingDate = _reportDate;
+                reportToEdit.ReportFilePath = _uploadedFilePath ?? reportToEdit.ReportFilePath;
+                if (!string.IsNullOrWhiteSpace(_uploadedFileName))
+                    reportToEdit.ReportOriginalFileName = _uploadedFileName;
+                savedReport = await ReportService.UpdateAsync(reportToEdit, new List<TestResult>(), CurrentUser);
+            }
+            else
+            {
+                var report = new Report
+                {
+                    ReferenceNumber = _referenceNumber ?? string.Empty,
+                    HospitalId = _hospitalId!.Value,
+                    DoctorId = _doctorId!.Value,
+                    PatientId = patient.Id,
+                    TestId = _testId!.Value,
+                    SpecimenType = _specimenType,
+                    SampleCollectionDate = _sampleCollectionDate,
+                    ReceivedAtLabDate = _receivedAtLabDate,
+                    ReportingDate = _reportDate,
+                    ReportFilePath = _uploadedFilePath,
+                    ReportOriginalFileName = _uploadedFileName
+                };
+
+                savedReport = await ReportService.CreateAsync(report, new List<TestResult>(), CurrentUser);
+            }
+
+            if (submitForReview)
+            {
+                await ReportService.SubmitForReviewAsync(savedReport.Id, CurrentUser);
+                ToastService.ShowToast("Uploaded report submitted for review.", ToastLevel.Success);
+            }
+            else
+            {
+                ToastService.ShowToast("Uploaded report draft saved.", ToastLevel.Success);
+            }
+
+            await OnClose.InvokeAsync(true);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+        {
+            _confirmAction = null;
+            var inner = ex.InnerException?.Message ?? ex.Message;
+            ToastService.ShowToast($"Database error: {inner}", ToastLevel.Error);
+        }
+        catch (Exception ex)
+        {
+            _confirmAction = null;
+            ToastService.ShowToast($"Error: {ex.Message}", ToastLevel.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

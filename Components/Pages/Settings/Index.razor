@@ -1,0 +1,454 @@
+@page "/system-settings"
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject SettingsService SettingsService
+@inject UserService UserService
+@inject AuditLogService AuditLogService
+@inject CurrentUserService CurrentUserService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ToastService ToastService
+
+<PageTitle>Settings - Geneflux LIS</PageTitle>
+
+@if (_loading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-header border-0 pb-0">
+            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+                <div>
+                    <h4 class="card-title mb-1">Settings</h4>
+                    <p class="text-muted mb-0">Configuration, governance, and administration for the LIS.</p>
+                </div>
+                @if (_activeTab == "users")
+                {
+                    <button type="button" class="btn btn-primary" @onclick="OpenCreateUserDialog">
+                        <i class="icon-base ti tabler-user-plus me-1"></i>Create User
+                    </button>
+                }
+            </div>
+
+            <ul class="nav nav-pills gap-2 mb-3">
+                @foreach (var tab in _tabs)
+                {
+                    <li class="nav-item">
+                        <button type="button"
+                                class='nav-link @(_activeTab == tab.Key ? "active" : null)'
+                                @onclick='() => _activeTab = tab.Key'>
+                            <i class="@tab.Icon me-1"></i>@tab.Label
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        <div class="card-body">
+            @if (_activeTab == "users")
+            {
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    @foreach (var roleTab in _userRoleTabs)
+                    {
+                        <button type="button"
+                                class='btn btn-sm @(_activeUserRoleFilter == roleTab.Role ? "btn-primary" : "btn-label-secondary")'
+                                @onclick='() => _activeUserRoleFilter = roleTab.Role'>
+                            @roleTab.Label
+                        </button>
+                    }
+                </div>
+
+                <div class="input-group input-group-merge app-search-input mb-3">
+                    <span class="input-group-text"><i class="icon-base ti tabler-search"></i></span>
+                    <input class="form-control" placeholder="Search user, email, or hospital..." @bind="_userSearch" @bind:event="oninput" />
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Hospital</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in FilteredUsers)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@user.FullName</td>
+                                    <td>@user.Email</td>
+                                    <td>@user.Role</td>
+                                    <td>@(user.Hospital?.Name ?? "-")</td>
+                                    <td>
+                                        <span class='badge @(user.IsActive ? "bg-label-success" : "bg-label-secondary")'>
+                                            @(user.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => OpenEditUserDialog(user)">Edit</button>
+                                            @if (user.IsActive)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-label-danger" @onclick="() => DeactivateUser(user)">Deactivate</button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (_activeTab == "roles")
+            {
+                <div class="row g-4">
+                    <div class="col-lg-4">
+                        <div class="list-group">
+                            @foreach (var role in _settings.Roles)
+                            {
+                                <button type="button"
+                                        class='list-group-item list-group-item-action @(SelectedRole?.RoleId == role.RoleId ? "active" : null)'
+                                        @onclick="() => SelectRole(role.RoleId)">
+                                    @role.RoleName
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-lg-8">
+                        @if (SelectedRole != null)
+                        {
+                            <h5 class="mb-3">@SelectedRole.RoleName Permissions</h5>
+                            <div class="row g-3">
+                                @foreach (var permission in _settings.Permissions)
+                                {
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="checkbox"
+                                                   id="@($"perm-{permission.Id}")"
+                                                   checked="@SelectedRole.PermissionCodes.Contains(permission.Code)"
+                                                   @onchange="e => TogglePermission(permission.Code, e.Value)" />
+                                            <label class="form-check-label" for="@($"perm-{permission.Id}")">
+                                                <span class="fw-semibold">@permission.Code</span><br />
+                                                <span class="text-muted small">@permission.Description</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <div class="mt-4">
+                                <button type="button" class="btn btn-primary" @onclick="SaveRolePermissions">Save Permissions</button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_activeTab == "organization")
+            {
+                <div class="row g-3">
+                    <div class="col-lg-6">
+                        <label class="form-label">Hospital</label>
+                        <select class="form-select" @bind="_selectedHospitalId" @bind:after="LoadSelectedHospital">
+                            @foreach (var hospital in _settings.Hospitals)
+                            {
+                                <option value="@hospital.Id">@hospital.Name</option>
+                            }
+                        </select>
+                    </div>
+                    @if (_selectedHospital != null)
+                    {
+                        <div class="col-lg-6">
+                            <label class="form-label">Name</label>
+                            <input class="form-control" @bind="_selectedHospital.Name" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" rows="3" @bind="_selectedHospital.Address"></textarea>
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label">Contact Number</label>
+                            <input class="form-control" @bind="_selectedHospital.ContactNumber" />
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label">Contact Email</label>
+                            <input class="form-control" @bind="_selectedHospital.ContactEmail" />
+                        </div>
+                        <div class="col-lg-4">
+                            <label class="form-label">Logo Path</label>
+                            <input class="form-control" @bind="_selectedHospital.LogoPath" />
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-primary" @onclick="SaveOrganization">Save Organization</button>
+                        </div>
+                    }
+                </div>
+            }
+            else if (_activeTab == "configuration")
+            {
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <h5 class="mb-3">Report Configuration</h5>
+                        @foreach (var setting in _reportConfiguration)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">@setting.Key</label>
+                                <input class="form-control" @bind="setting.Value" />
+                            </div>
+                        }
+                    </div>
+                    <div class="col-lg-6">
+                        <h5 class="mb-3">Retention</h5>
+                        @foreach (var setting in _retentionConfiguration)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">@setting.Key</label>
+                                <input class="form-control" @bind="setting.Value" />
+                            </div>
+                        }
+                    </div>
+                    <div class="col-12">
+                        <button type="button" class="btn btn-primary" @onclick="SaveConfiguration">Save Configuration</button>
+                    </div>
+                </div>
+            }
+            else if (_activeTab == "audit")
+            {
+                <div class="row g-3 mb-3">
+                    <div class="col-lg-4">
+                        <input class="form-control" placeholder="Filter by action" @bind="_auditFilter.Action" />
+                    </div>
+                    <div class="col-lg-4">
+                        <input class="form-control" placeholder="Filter by entity" @bind="_auditFilter.EntityType" />
+                    </div>
+                    <div class="col-lg-4">
+                        <button type="button" class="btn btn-label-primary" @onclick="LoadAuditLogs">Refresh Logs</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Entity</th>
+                                <th>Entity Id</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in _auditLogs)
+                            {
+                                <tr>
+                                    <td>@log.PerformedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@log.PerformedByName</td>
+                                    <td>@log.Action</td>
+                                    <td>@log.EntityType</td>
+                                    <td>@log.EntityId</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (_showUserDialog)
+{
+    <UserFormDialog ExistingUser="@_editingUser"
+                    Hospitals="@_settings.Hospitals.Where(h => h.IsActive).ToList()"
+                    OnClose="HandleUserDialogClose" />
+}
+
+@code {
+    private readonly (string Key, string Label, string Icon)[] _tabs =
+    [
+        ("users", "Users", "icon-base ti tabler-users"),
+        ("roles", "Roles", "icon-base ti tabler-shield-check"),
+        ("organization", "Organization", "icon-base ti tabler-building-hospital"),
+        ("configuration", "Configuration", "icon-base ti tabler-adjustments"),
+        ("audit", "Audit Logs", "icon-base ti tabler-history")
+    ];
+
+    private readonly (UserRole? Role, string Label)[] _userRoleTabs =
+    [
+        (null, "All"),
+        (UserRole.SuperAdmin, "Super Admin"),
+        (UserRole.LabAdmin, "Lab Admin"),
+        (UserRole.Doctor, "Doctor"),
+        (UserRole.HeadNurse, "Head Nurse"),
+        (UserRole.LabManager, "Lab Manager")
+    ];
+
+    private SettingsSnapshot _settings = new();
+    private List<ApplicationUser> _users = new();
+    private List<AuditLog> _auditLogs = new();
+    private List<SettingEntry> _reportConfiguration = new();
+    private List<SettingEntry> _retentionConfiguration = new();
+    private AuditLogFilter _auditFilter = new();
+    private ApplicationUser? _currentUser;
+    private ApplicationUser? _editingUser;
+    private Hospital? _selectedHospital;
+    private RolePermissionView? SelectedRole;
+    private bool _loading = true;
+    private bool _showUserDialog;
+    private string _activeTab = "users";
+    private string _userSearch = string.Empty;
+    private UserRole? _activeUserRoleFilter;
+    private int _selectedHospitalId;
+
+    private IEnumerable<ApplicationUser> FilteredUsers =>
+        string.IsNullOrWhiteSpace(_userSearch)
+            ? ApplyRoleFilter(_users)
+            : ApplyRoleFilter(_users).Where(user =>
+                user.FullName.Contains(_userSearch, StringComparison.OrdinalIgnoreCase) ||
+                (user.Email?.Contains(_userSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (user.Hospital?.Name?.Contains(_userSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUser = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        await LoadAllData();
+        _loading = false;
+    }
+
+    private async Task LoadAllData()
+    {
+        _settings = await SettingsService.GetSnapshotAsync();
+        _users = await UserService.GetAllUsersAsync();
+        _reportConfiguration = _settings.ReportConfiguration.Select(CloneSetting).ToList();
+        _retentionConfiguration = _settings.Retention.Select(CloneSetting).ToList();
+        SelectedRole = _settings.Roles.FirstOrDefault();
+        _selectedHospitalId = _settings.Hospitals.FirstOrDefault()?.Id ?? 0;
+        LoadSelectedHospital();
+        await LoadAuditLogs();
+    }
+
+    private static SettingEntry CloneSetting(SettingEntry setting) => new()
+    {
+        Key = setting.Key,
+        Value = setting.Value,
+        ValueType = setting.ValueType
+    };
+
+    private void OpenCreateUserDialog()
+    {
+        _editingUser = null;
+        _showUserDialog = true;
+    }
+
+    private void OpenEditUserDialog(ApplicationUser user)
+    {
+        _editingUser = new ApplicationUser
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email ?? string.Empty,
+            Role = user.Role,
+            HospitalId = user.HospitalId,
+            IsActive = user.IsActive
+        };
+        _showUserDialog = true;
+    }
+
+    private async Task HandleUserDialogClose(bool success)
+    {
+        _showUserDialog = false;
+        _editingUser = null;
+        if (success)
+        {
+            ToastService.ShowToast("User settings saved.", ToastLevel.Success);
+            await LoadAllData();
+        }
+    }
+
+    private async Task DeactivateUser(ApplicationUser user)
+    {
+        if (_currentUser == null)
+            return;
+
+        await UserService.DeactivateUserAsync(user.Id, _currentUser);
+        ToastService.ShowToast("User deactivated.", ToastLevel.Success);
+        await LoadAllData();
+    }
+
+    private void SelectRole(string roleId)
+    {
+        SelectedRole = _settings.Roles.FirstOrDefault(role => role.RoleId == roleId);
+    }
+
+    private void TogglePermission(string code, object? isChecked)
+    {
+        if (SelectedRole == null)
+            return;
+
+        var enabled = isChecked as bool? == true;
+        if (enabled && !SelectedRole.PermissionCodes.Contains(code))
+            SelectedRole.PermissionCodes.Add(code);
+        else if (!enabled)
+            SelectedRole.PermissionCodes.Remove(code);
+    }
+
+    private async Task SaveRolePermissions()
+    {
+        if (_currentUser == null || SelectedRole == null)
+            return;
+
+        await SettingsService.UpdateRolePermissionsAsync(SelectedRole.RoleId, SelectedRole.PermissionCodes, _currentUser);
+        ToastService.ShowToast("Role permissions updated.", ToastLevel.Success);
+        await LoadAllData();
+    }
+
+    private void LoadSelectedHospital()
+    {
+        _selectedHospital = _settings.Hospitals.FirstOrDefault(h => h.Id == _selectedHospitalId);
+    }
+
+    private async Task SaveOrganization()
+    {
+        if (_currentUser == null || _selectedHospital == null)
+            return;
+
+        await SettingsService.UpdateHospitalAsync(_selectedHospital, _currentUser);
+        ToastService.ShowToast("Organization settings updated.", ToastLevel.Success);
+        await LoadAllData();
+    }
+
+    private async Task SaveConfiguration()
+    {
+        if (_currentUser == null)
+            return;
+
+        await SettingsService.UpdateSettingsAsync(new SettingsUpdateRequest
+        {
+            ReportConfiguration = _reportConfiguration,
+            Retention = _retentionConfiguration
+        }, _currentUser);
+
+        ToastService.ShowToast("Configuration saved.", ToastLevel.Success);
+        await LoadAllData();
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        _auditLogs = await AuditLogService.GetAsync(_auditFilter);
+    }
+
+    private IEnumerable<ApplicationUser> ApplyRoleFilter(IEnumerable<ApplicationUser> users)
+    {
+        return _activeUserRoleFilter.HasValue
+            ? users.Where(user => user.Role == _activeUserRoleFilter.Value)
+            : users;
+    }
+}

@@ -1,0 +1,83 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="row g-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase fw-medium text-muted mb-2">Total Reports</p>
+                        <h4 class="mb-3">@Model.TotalReports</h4>
+                        <a href="/Reports" class="btn btn-sm btn-label-primary">View reports</a>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-success">
+                            <i class="icon-base ti tabler-files"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase fw-medium text-muted mb-2">Draft Reports</p>
+                        <h4 class="mb-3">@Model.DraftReports</h4>
+                        <a href="/Reports?status=Draft" class="btn btn-sm btn-label-warning">Review drafts</a>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-warning">
+                            <i class="icon-base ti tabler-clock-edit"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase fw-medium text-muted mb-2">Approved Reports</p>
+                        <h4 class="mb-3">@Model.ApprovedReports</h4>
+                        <a href="/Reports?status=Approved" class="btn btn-sm btn-label-success">Approved</a>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-primary">
+                            <i class="icon-base ti tabler-circle-check"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <p class="text-uppercase fw-medium text-muted mb-2">Total Doctors</p>
+                        <h4 class="mb-3">@Model.TotalDoctors</h4>
+                        <a href="/Administration/Doctors" class="btn btn-sm btn-label-info">Directory</a>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-info">
+                            <i class="icon-base ti tabler-stethoscope"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

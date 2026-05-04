@@ -1,0 +1,101 @@
+@using LIS.Contracts.Administration
+
+<div class="modal fade show lis-modal-shell" tabindex="-1" aria-modal="true" role="dialog" @onclick="Cancel">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable lis-modal-dialog">
+        <div class="modal-content lis-modal-content app-dialog" @onclick:stopPropagation="true">
+            <div class="modal-header border-bottom-0 pb-0">
+                <div>
+                    <h5 class="modal-title mb-1">
+                        <i class="icon-base ti tabler-building-hospital me-2 text-primary"></i>@(HospitalId.HasValue ? "Edit Hospital" : "Create Hospital")
+                    </h5>
+                    <p class="text-muted mb-0">Maintain hospital information used across the system.</p>
+                </div>
+                <button type="button" class="btn-close lis-modal-close" @onclick="Cancel" aria-label="Close"></button>
+            </div>
+            <div class="modal-body lis-modal-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Hospital Name</label>
+                        <input class="form-control" @bind="_name" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" rows="3" @bind="_address"></textarea>
+                    </div>
+                    <div class="col-lg-4">
+                        <label class="form-label">Contact Number</label>
+                        <input class="form-control" @bind="_contactNumber" />
+                    </div>
+                    <div class="col-lg-4">
+                        <label class="form-label">Contact Email</label>
+                        <input class="form-control" @bind="_contactEmail" />
+                    </div>
+                    <div class="col-lg-4">
+                        <label class="form-label">Logo Path</label>
+                        <input class="form-control" @bind="_logoPath" />
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="hospital-active-toggle" @bind="_isActive" />
+                            <label class="form-check-label" for="hospital-active-toggle">Active hospital</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top lis-modal-footer">
+                <button type="button" class="btn btn-label-secondary" @onclick="Cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="Submit">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? HospitalId { get; set; }
+    [Parameter] public string Name { get; set; } = string.Empty;
+    [Parameter] public string? Address { get; set; }
+    [Parameter] public string? ContactNumber { get; set; }
+    [Parameter] public string? ContactEmail { get; set; }
+    [Parameter] public string? LogoPath { get; set; }
+    [Parameter] public bool IsActive { get; set; } = true;
+    [Parameter] public EventCallback<HospitalFormResult?> OnClose { get; set; }
+
+    private string _name = string.Empty;
+    private string? _address;
+    private string? _contactNumber;
+    private string? _contactEmail;
+    private string? _logoPath;
+    private bool _isActive = true;
+
+    protected override void OnInitialized()
+    {
+        _name = Name;
+        _address = Address;
+        _contactNumber = ContactNumber;
+        _contactEmail = ContactEmail;
+        _logoPath = LogoPath;
+        _isActive = IsActive;
+    }
+
+    private Task Cancel() => OnClose.InvokeAsync(null);
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+            return;
+
+        await OnClose.InvokeAsync(new HospitalFormResult
+        {
+            HospitalId = HospitalId,
+            Request = new UpdateHospitalRequest
+            {
+                Name = _name.Trim(),
+                Address = _address,
+                ContactNumber = _contactNumber,
+                ContactEmail = _contactEmail,
+                LogoPath = _logoPath,
+                IsActive = _isActive
+            }
+        });
+    }
+}

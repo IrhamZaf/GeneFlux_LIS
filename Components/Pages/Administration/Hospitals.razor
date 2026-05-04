@@ -1,0 +1,302 @@
+@page "/administration/hospitals"
+@attribute [Authorize(Roles = "SuperAdmin")]
+@using LIS.Contracts.Administration
+@inject AdministrationService AdministrationService
+@inject CurrentUserService CurrentUserService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ToastService ToastService
+
+<PageTitle>Hospitals - Geneflux LIS</PageTitle>
+
+@if (_loading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-header border-0 d-flex flex-column flex-lg-row justify-content-between gap-3">
+            <div>
+                <h4 class="card-title mb-1">Hospitals</h4>
+                <p class="text-muted mb-0">Administrative directory of hospitals, usage, and ownership.</p>
+            </div>
+            <button type="button" class="btn btn-primary" @onclick="OpenCreateDialog">
+                <i class="icon-base ti tabler-plus me-1"></i>Create Hospital
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-md-7">
+                    <label class="form-label" for="hospitalSearch">Search hospital</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="icon-base ti tabler-search"></i></span>
+                        <input id="hospitalSearch"
+                               class="form-control"
+                               placeholder="Search by hospital name"
+                               value="@_searchTerm"
+                               @oninput="HandleSearchChanged" />
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label" for="hospitalStatus">Status</label>
+                    <select id="hospitalStatus" class="form-select" value="@_statusFilter" @onchange="HandleStatusChanged">
+                        <option value="all">All statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Hospital</th>
+                            <th>Users</th>
+                            <th>Patients</th>
+                            <th>Reports</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (FilteredHospitals.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">No hospitals match your filters.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var hospital in PagedHospitals)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@hospital.Name</div>
+                                        <div class="text-muted small">@hospital.Address</div>
+                                    </td>
+                                    <td>@hospital.TotalUsers</td>
+                                    <td>@hospital.TotalPatients</td>
+                                    <td>@hospital.TotalReports</td>
+                                    <td><span class='badge @(hospital.IsActive ? "bg-label-success" : "bg-label-secondary")'>@(hospital.IsActive ? "Active" : "Inactive")</span></td>
+                                    <td class="text-end">
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <a class="btn btn-sm btn-label-secondary" href="/administration/hospitals/@hospital.Id">View</a>
+                                            <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => OpenEditDialog(hospital)">Edit</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (FilteredHospitals.Count > 0)
+            {
+                <div class="lis-table-pagination border-top d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mt-2">
+                    <div class="text-muted small">@HospitalRangeLabel</div>
+                    <nav aria-label="Hospital pagination">
+                        <ul class="pagination mb-0">
+                            <li class="page-item @(_hospitalPage <= 1 ? "disabled" : "")">
+                                <button type="button" class="page-link" @onclick="HospitalPrevPage" disabled="@(_hospitalPage <= 1)">Prev</button>
+                            </li>
+                            <li class="page-item disabled">
+                                <span class="page-link">@_hospitalPage / @HospitalTotalPages</span>
+                            </li>
+                            <li class="page-item @(_hospitalPage >= HospitalTotalPages ? "disabled" : "")">
+                                <button type="button" class="page-link" @onclick="HospitalNextPage" disabled="@(_hospitalPage >= HospitalTotalPages)">Next</button>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (_showDialog)
+{
+    <HospitalFormDialog HospitalId="@_editingHospitalId"
+                        Name="@_editingName"
+                        Address="@_editingAddress"
+                        ContactNumber="@_editingContactNumber"
+                        ContactEmail="@_editingContactEmail"
+                        LogoPath="@_editingLogoPath"
+                        IsActive="@_editingIsActive"
+                        OnClose="HandleDialogClose" />
+}
+
+@code {
+    private const int HospitalPageSize = 10;
+    private List<HospitalListItemDto> _hospitals = new();
+    private ApplicationUser? _currentUser;
+    private bool _loading = true;
+    private bool _showDialog;
+    private int? _editingHospitalId;
+    private string _editingName = string.Empty;
+    private string? _editingAddress;
+    private string? _editingContactNumber;
+    private string? _editingContactEmail;
+    private string? _editingLogoPath;
+    private bool _editingIsActive = true;
+    private string _searchTerm = string.Empty;
+    private string _statusFilter = "all";
+    private int _hospitalPage = 1;
+
+    private List<HospitalListItemDto> FilteredHospitals
+    {
+        get
+        {
+            var query = _hospitals.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                query = query.Where(h =>
+                    h.Name.Contains(_searchTerm.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            query = _statusFilter switch
+            {
+                "active" => query.Where(h => h.IsActive),
+                "inactive" => query.Where(h => !h.IsActive),
+                _ => query
+            };
+
+            return query.ToList();
+        }
+    }
+
+    private List<HospitalListItemDto> PagedHospitals => FilteredHospitals
+        .Skip((_hospitalPage - 1) * HospitalPageSize)
+        .Take(HospitalPageSize)
+        .ToList();
+
+    private int HospitalTotalPages => Math.Max(1, (int)Math.Ceiling(FilteredHospitals.Count / (double)HospitalPageSize));
+
+    private string HospitalRangeLabel
+    {
+        get
+        {
+            var total = FilteredHospitals.Count;
+            if (total == 0)
+                return "No hospitals";
+
+            var start = ((_hospitalPage - 1) * HospitalPageSize) + 1;
+            var end = Math.Min(_hospitalPage * HospitalPageSize, total);
+            return $"Showing {start}-{end} of {total} hospitals";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUser = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        await LoadHospitals();
+        _loading = false;
+    }
+
+    private async Task LoadHospitals()
+    {
+        _hospitals = await AdministrationService.GetHospitalsAsync();
+        ClampHospitalPage();
+    }
+
+    private void HandleSearchChanged(ChangeEventArgs e)
+    {
+        _searchTerm = e.Value?.ToString() ?? string.Empty;
+        _hospitalPage = 1;
+    }
+
+    private void HandleStatusChanged(ChangeEventArgs e)
+    {
+        _statusFilter = e.Value?.ToString() ?? "all";
+        _hospitalPage = 1;
+    }
+
+    private void HospitalPrevPage()
+    {
+        if (_hospitalPage > 1)
+            _hospitalPage--;
+    }
+
+    private void HospitalNextPage()
+    {
+        if (_hospitalPage < HospitalTotalPages)
+            _hospitalPage++;
+    }
+
+    private void ClampHospitalPage()
+    {
+        if (_hospitalPage > HospitalTotalPages)
+            _hospitalPage = HospitalTotalPages;
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingHospitalId = null;
+        _editingName = string.Empty;
+        _editingAddress = null;
+        _editingContactNumber = null;
+        _editingContactEmail = null;
+        _editingLogoPath = null;
+        _editingIsActive = true;
+        _showDialog = true;
+    }
+
+    private void OpenEditDialog(HospitalListItemDto hospital)
+    {
+        _editingHospitalId = hospital.Id;
+        _editingName = hospital.Name;
+        _editingAddress = hospital.Address;
+        _editingContactNumber = hospital.ContactNumber;
+        _editingContactEmail = hospital.ContactEmail;
+        _editingLogoPath = hospital.LogoPath;
+        _editingIsActive = hospital.IsActive;
+        _showDialog = true;
+    }
+
+    private async Task HandleDialogClose(HospitalFormResult? result)
+    {
+        _showDialog = false;
+        if (result == null || _currentUser == null)
+            return;
+
+        try
+        {
+            if (result.HospitalId.HasValue)
+            {
+                var ok = await AdministrationService.UpdateHospitalAsync(result.HospitalId.Value, result.Request, _currentUser);
+                if (!ok)
+                {
+                    ToastService.ShowToast("Hospital not found.", ToastLevel.Warning);
+                    return;
+                }
+            }
+            else
+            {
+                await AdministrationService.CreateHospitalAsync(new CreateHospitalRequest
+                {
+                    Name = result.Request.Name,
+                    Address = result.Request.Address,
+                    ContactNumber = result.Request.ContactNumber,
+                    ContactEmail = result.Request.ContactEmail,
+                    LogoPath = result.Request.LogoPath,
+                    IsActive = result.Request.IsActive
+                }, _currentUser);
+            }
+
+            ToastService.ShowToast("Hospital saved.", ToastLevel.Success);
+            await LoadHospitals();
+        }
+        catch (Exception ex)
+        {
+            var inner = ex.InnerException?.Message ?? ex.Message;
+            ToastService.ShowToast($"Error saving hospital: {inner}", ToastLevel.Error);
+        }
+    }
+}
