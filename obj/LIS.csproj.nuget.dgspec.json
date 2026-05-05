@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Dev\\LIS\\LIS.csproj": {}
+    "c:\\Dev\\LIS\\LIS.csproj": {}
   },
   "projects": {
-    "C:\\Dev\\LIS\\LIS.csproj": {
+    "c:\\Dev\\LIS\\LIS.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Dev\\LIS\\LIS.csproj",
+        "projectUniqueName": "c:\\Dev\\LIS\\LIS.csproj",
         "projectName": "LIS",
-        "projectPath": "C:\\Dev\\LIS\\LIS.csproj",
+        "projectPath": "c:\\Dev\\LIS\\LIS.csproj",
         "packagesPath": "C:\\Users\\User\\.nuget\\packages\\",
-        "outputPath": "C:\\Dev\\LIS\\obj\\",
+        "outputPath": "c:\\Dev\\LIS\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

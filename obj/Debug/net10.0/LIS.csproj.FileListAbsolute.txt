@@ -3478,3 +3478,4 @@ c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\libstdc++-6.dll
 c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\libwinpthread-1.dll
 c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\qpdf.dll
 c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\zlib1.dll
+C:\Dev\LIS\obj\Debug\net10.0\LIS.sourcelink.json
