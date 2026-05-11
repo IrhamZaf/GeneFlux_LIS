@@ -1,12 +1,12 @@
 @page "/administration/users"
-@attribute [Authorize(Roles = "SuperAdmin")]
+@attribute [Authorize(Roles = "SuperAdmin,LabAdmin,Admin")]
 @inject UserService UserService
 @inject SettingsService SettingsService
 @inject CurrentUserService CurrentUserService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ToastService ToastService
 
-<PageTitle>Users - Geneflux LIS</PageTitle>
+<PageTitle>User Accounts - Geneflux LIS</PageTitle>
 
 @if (_loading)
 {
@@ -21,7 +21,7 @@ else
     <div class="card border-0 shadow-sm">
         <div class="card-header border-0 d-flex flex-column flex-lg-row justify-content-between gap-3">
             <div>
-                <h4 class="card-title mb-1">Users</h4>
+                <h4 class="card-title mb-1">User Accounts</h4>
                 <p class="text-muted mb-0">Create users, assign roles, and manage hospital access.</p>
             </div>
             <button type="button" class="btn btn-primary" @onclick="OpenCreateUserDialog">
@@ -30,7 +30,7 @@ else
         </div>
         <div class="card-body">
             <div class="d-flex flex-wrap gap-2 mb-3">
-                @foreach (var roleTab in _userRoleTabs)
+                @foreach (var roleTab in VisibleRoleTabs)
                 {
                     <button type="button"
                             class='btn btn-sm @(_activeUserRoleFilter == roleTab.Role ? "btn-primary" : "btn-label-secondary")'
@@ -68,10 +68,17 @@ else
                                 <td><span class='badge @(user.IsActive ? "bg-label-success" : "bg-label-secondary")'>@(user.IsActive ? "Active" : "Inactive")</span></td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-2">
-                                        <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => OpenEditUserDialog(user)">Edit</button>
-                                        @if (user.IsActive)
+                                        @if (CanManageUserRow(_currentUser, user))
                                         {
-                                            <button type="button" class="btn btn-sm btn-label-danger" @onclick="() => DeactivateUser(user)">Deactivate</button>
+                                            <button type="button" class="btn btn-sm btn-label-primary" @onclick="async () => await OpenEditUserDialog(user)">Edit</button>
+                                            @if (user.IsActive)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-label-danger" @onclick="() => DeactivateUser(user)">Deactivate</button>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">Super Admin</span>
                                         }
                                     </div>
                                 </td>
@@ -88,6 +95,7 @@ else
 {
     <UserFormDialog ExistingUser="@_editingUser"
                     Hospitals="@_hospitals.Where(h => h.IsActive).ToList()"
+                    AllowSuperAdminRolePicker="@(_currentUser?.Role != UserRole.LabAdmin)"
                     OnClose="HandleUserDialogClose" />
 }
 
@@ -110,6 +118,14 @@ else
     private bool _showUserDialog;
     private string _userSearch = string.Empty;
     private UserRole? _activeUserRoleFilter;
+
+    private IEnumerable<(UserRole? Role, string Label)> VisibleRoleTabs =>
+        _currentUser?.Role == UserRole.LabAdmin
+            ? _userRoleTabs.Where(t => t.Role != UserRole.SuperAdmin)
+            : _userRoleTabs;
+
+    private static bool CanManageUserRow(ApplicationUser? actor, ApplicationUser user) =>
+        actor is null || actor.Role != UserRole.LabAdmin || user.Role != UserRole.SuperAdmin;
 
     private IEnumerable<ApplicationUser> FilteredUsers =>
         string.IsNullOrWhiteSpace(_userSearch)
@@ -139,9 +155,9 @@ else
         _showUserDialog = true;
     }
 
-    private void OpenEditUserDialog(ApplicationUser user)
+    private async Task OpenEditUserDialog(ApplicationUser user)
     {
-        _editingUser = new ApplicationUser
+        _editingUser = await UserService.GetByIdAsync(user.Id) ?? new ApplicationUser
         {
             Id = user.Id,
             FullName = user.FullName,
@@ -169,7 +185,13 @@ else
         if (_currentUser == null)
             return;
 
-        await UserService.DeactivateUserAsync(user.Id, _currentUser);
+        var ok = await UserService.DeactivateUserAsync(user.Id, _currentUser);
+        if (!ok)
+        {
+            ToastService.ShowToast("Unable to deactivate this user.", ToastLevel.Warning);
+            return;
+        }
+
         ToastService.ShowToast("User deactivated.", ToastLevel.Success);
         await LoadAllData();
     }

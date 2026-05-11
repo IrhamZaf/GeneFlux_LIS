@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "HNdA3NPQq+Q=",
+  "dgSpecHash": "/DD/3WWLILw=",
   "success": true,
-  "projectFilePath": "c:\\Dev\\LIS\\LIS.csproj",
+  "projectFilePath": "C:\\Dev\\LIS\\LIS.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\User\\.nuget\\packages\\azure.core\\1.47.1\\azure.core.1.47.1.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\azure.identity\\1.14.2\\azure.identity.1.14.2.nupkg.sha512",

@@ -10,15 +10,18 @@ public class UserService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
     private readonly AuditLogService _auditLogService;
+    private readonly EmailService _emailService;
 
     public UserService(
         UserManager<ApplicationUser> userManager,
         IDbContextFactory<ApplicationDbContext> contextFactory,
-        AuditLogService auditLogService)
+        AuditLogService auditLogService,
+        EmailService emailService)
     {
         _userManager = userManager;
         _contextFactory = contextFactory;
         _auditLogService = auditLogService;
+        _emailService = emailService;
     }
 
     public async Task<List<ApplicationUser>> GetUsersByRoleAsync(UserRole role)
@@ -53,17 +56,23 @@ public class UserService
         await using var context = await _contextFactory.CreateDbContextAsync();
         return await context.Users
             .Include(u => u.Hospital)
+            .Include(u => u.Doctor)
             .Include(u => u.UserHospitals)
                 .ThenInclude(uh => uh.Hospital)
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
-    public async Task<(bool Success, string[] Errors)> CreateUserAsync(ApplicationUser user, string password, ApplicationUser? actor = null)
+    public async Task<(bool Success, string[] Errors)> CreateUserAsync(ApplicationUser user, string password, ApplicationUser? actor = null, string? doctorSpecialty = null)
     {
         user.UserName = user.Email;
         user.EmailConfirmed = true;
         user.CreatedAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
+        user.MobileNumber = string.IsNullOrWhiteSpace(user.MobileNumber) ? null : user.MobileNumber.Trim();
+        user.OfficeNumber = string.IsNullOrWhiteSpace(user.OfficeNumber) ? null : user.OfficeNumber.Trim();
+
+        if (actor?.Role == UserRole.LabAdmin && user.Role == UserRole.SuperAdmin)
+            return (false, ["Super Admin accounts can only be created by a Super Admin."]);
 
         if (!string.IsNullOrWhiteSpace(user.Email))
         {
@@ -89,6 +98,11 @@ public class UserService
 
         await SyncRolesAsync(user, null, user.Role);
         await SyncUserHospitalsAsync(user.Id, ResolveHospitalIds(user));
+
+        var createdAppUser = await _userManager.FindByIdAsync(user.Id) as ApplicationUser;
+        if (createdAppUser != null)
+            await SyncDoctorProfileAsync(createdAppUser, doctorSpecialty, actor);
+
         await _auditLogService.WriteAsync("UserCreated", "User", user.Id, actor, after: new
         {
             user.FullName,
@@ -98,14 +112,21 @@ public class UserService
             user.IsActive
         });
 
+        if (!string.IsNullOrWhiteSpace(user.Email))
+            await _emailService.SendAdminProvisionedAccountWelcomeAsync(user.Email.Trim(), user.FullName ?? user.Email.Trim());
+
         return (true, Array.Empty<string>());
     }
 
-    public async Task<(bool Success, string[] Errors)> UpdateUserAsync(ApplicationUser user, ApplicationUser? actor = null)
+    public async Task<(bool Success, string[] Errors)> UpdateUserAsync(ApplicationUser user, ApplicationUser? actor = null, string? doctorSpecialty = null)
     {
         var existing = await _userManager.FindByIdAsync(user.Id);
         if (existing is not ApplicationUser current)
             return (false, ["User not found."]);
+
+        if (actor?.Role == UserRole.LabAdmin &&
+            (current.Role == UserRole.SuperAdmin || user.Role == UserRole.SuperAdmin))
+            return (false, ["Super Admin accounts can only be managed by a Super Admin."]);
 
         var before = new
         {
@@ -141,6 +162,8 @@ public class UserService
         current.Role = user.Role;
         current.HospitalId = user.HospitalId;
         current.IsActive = user.IsActive;
+        current.MobileNumber = string.IsNullOrWhiteSpace(user.MobileNumber) ? null : user.MobileNumber.Trim();
+        current.OfficeNumber = string.IsNullOrWhiteSpace(user.OfficeNumber) ? null : user.OfficeNumber.Trim();
         current.UpdatedAt = DateTime.UtcNow;
 
         var result = await _userManager.UpdateAsync(current);
@@ -149,6 +172,11 @@ public class UserService
 
         await SyncRolesAsync(current, previousRole, current.Role);
         await SyncUserHospitalsAsync(current.Id, ResolveHospitalIds(user));
+
+        var refreshed = await _userManager.FindByIdAsync(current.Id) as ApplicationUser;
+        if (refreshed != null)
+            await SyncDoctorProfileAsync(refreshed, doctorSpecialty, actor);
+
         await _auditLogService.WriteAsync("UserUpdated", "User", current.Id, actor, before, new
         {
             current.FullName,
@@ -165,6 +193,9 @@ public class UserService
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user is not ApplicationUser appUser)
+            return false;
+
+        if (actor?.Role == UserRole.LabAdmin && appUser.Role == UserRole.SuperAdmin)
             return false;
 
         var before = new
@@ -274,6 +305,51 @@ public class UserService
             appUser.UpdatedAt = DateTime.UtcNow;
             await _userManager.UpdateAsync(appUser);
         }
+
+        await context.SaveChangesAsync();
+    }
+
+    private async Task SyncDoctorProfileAsync(ApplicationUser user, string? doctorSpecialty, ApplicationUser? actor)
+    {
+        if (user.Role != UserRole.Doctor || !user.HospitalId.HasValue)
+            return;
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        Doctor? doctor = null;
+        if (user.DoctorId.HasValue)
+            doctor = await context.Doctors.FirstOrDefaultAsync(d => d.Id == user.DoctorId.Value);
+
+        if (doctor == null)
+        {
+            doctor = new Doctor
+            {
+                Name = user.FullName,
+                Email = user.Email,
+                HospitalId = user.HospitalId.Value,
+                Specialty = string.IsNullOrWhiteSpace(doctorSpecialty) ? null : doctorSpecialty.Trim(),
+                IsActive = true
+            };
+            context.Doctors.Add(doctor);
+            await context.SaveChangesAsync();
+
+            var tracked = await context.Users.FirstAsync(u => u.Id == user.Id);
+            tracked.DoctorId = doctor.Id;
+            await context.SaveChangesAsync();
+
+            doctor.UserId = tracked.Id;
+            await context.SaveChangesAsync();
+
+            await _auditLogService.WriteAsync("DoctorLinkedToUser", "Doctor", doctor.Id.ToString(), actor,
+                metadata: new { user.Id, user.FullName });
+            return;
+        }
+
+        doctor.Name = user.FullName;
+        doctor.Email = user.Email;
+        doctor.HospitalId = user.HospitalId.Value;
+        if (!string.IsNullOrWhiteSpace(doctorSpecialty))
+            doctor.Specialty = doctorSpecialty.Trim();
 
         await context.SaveChangesAsync();
     }

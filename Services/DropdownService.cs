@@ -21,6 +21,18 @@ public class DropdownService
         return await context.Hospitals.Where(h => h.IsActive).OrderBy(h => h.Name).ToListAsync();
     }
 
+    public async Task<List<string>> GetDistinctDoctorSpecialtiesAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.Doctors
+            .AsNoTracking()
+            .Where(d => d.IsActive && d.Specialty != null && d.Specialty != "")
+            .Select(d => d.Specialty!)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToListAsync();
+    }
+
     public async Task<List<Doctor>> GetDoctorsAsync(int? hospitalId = null)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();

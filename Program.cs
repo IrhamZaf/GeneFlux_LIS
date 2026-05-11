@@ -34,7 +34,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("ViewReports", policy => policy.RequireRole("SuperAdmin", "LabAdmin", "Admin", "Doctor", "HeadNurse", "LabManager"));
     options.AddPolicy("SystemSettingsOnly", policy => policy.RequireRole("SuperAdmin"));
     options.AddPolicy("ManageSettings", policy => policy.RequireRole("SuperAdmin"));
-    options.AddPolicy("ViewAuditLogs", policy => policy.RequireRole("SuperAdmin"));
+    options.AddPolicy("ViewAuditLogs", policy => policy.RequireRole("SuperAdmin", "LabAdmin", "Admin"));
 });
 
 // Cookie config
@@ -64,9 +64,11 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<RoleAccessService>();
 builder.Services.AddScoped<CurrentUserService>();
 builder.Services.AddScoped<StaffRegistrationService>();
+builder.Services.AddHostedService<ReportArchiveBackgroundService>();
 
 // Email Settings
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
+builder.Services.Configure<AppSiteSettings>(builder.Configuration.GetSection("App"));
 
 // Blazor + Razor Pages (for login/logout)
 builder.Services.AddRazorPages();

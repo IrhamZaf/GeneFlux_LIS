@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LIS")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+166cdceb6ddb14df12a3fd7db5bcfdf38bcc6ac7")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+aeca18b595edb80fdcffd5281fe37630bf00f95d")]
 [assembly: System.Reflection.AssemblyProductAttribute("LIS")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LIS")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

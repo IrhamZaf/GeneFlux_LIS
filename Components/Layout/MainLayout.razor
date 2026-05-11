@@ -275,7 +275,7 @@
 
         return section switch
         {
-            "main" => string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("reports") || relativePath.StartsWith("patients") || relativePath.StartsWith("profile"),
+            "main" => string.IsNullOrEmpty(relativePath) || relativePath.StartsWith("home/") || relativePath.StartsWith("reports") || relativePath.StartsWith("patients") || relativePath.StartsWith("profile"),
             "administration" => relativePath.StartsWith("administration"),
             _ => false
         };
@@ -331,7 +331,7 @@
     private async Task RefreshPendingRegistrationBadgeAsync()
     {
         if (!_roleLoaded) return;
-        if (_currentRole != UserRole.SuperAdmin && _currentRole != UserRole.LabAdmin) return;
+        if (_currentRole is not (UserRole.SuperAdmin or UserRole.LabAdmin)) return;
         try
         {
             _pendingStaffRegistrations = await StaffRegistrationService.GetPendingRegistrationCountAsync();
@@ -358,6 +358,10 @@
         (_pageTitle, _pageSubtitle, _breadcrumbSection) = relativePath switch
         {
             "" => ("Analytics", "Overview of laboratory activity and current workload.", "Dashboards"),
+            "home/geneflux-super-admin" => ("Super Admin overview", "System-wide analytics and administration shortcuts.", "Dashboards"),
+            "home/geneflux-lab-admin" => ("Lab Admin workspace", "Operational reporting across all partner hospitals.", "Dashboards"),
+            "home/clinical-doctor" => ("Clinical dashboard", "Approved reports and patients attributed to you.", "Dashboards"),
+            "home/hospital-reporting" => ("Hospital reporting", "Read-only hospital-wide approved reports.", "Dashboards"),
             "reports" => ("Reports", "Unified report workspace with status-based actions and search.", "Workspace"),
             "patients" => ("Patient Directory", "Review patient records, results, and downloadable reports.", "Dashboards"),
             "patients/search" => ("Search Patient", "Search and select patients based on your role access.", "Process Flow"),
@@ -365,8 +369,9 @@
             "patients/download" => ("Download Report", "Download or print completed patient reports.", "Process Flow"),
             "administration" => ("Administration", "Manage hospitals and users across the system.", "Administration"),
             "administration/hospitals" => ("Hospitals", "Manage hospitals and review administrative details.", "Administration"),
-            "administration/users" => ("Users", "Create users, assign roles, and manage hospital access.", "Administration"),
-            "administration/registration-requests" => ("Staff registrations", "Approve or reject self-service sign-ups before accounts are created.", "Administration"),
+            "administration/users" => ("User Accounts", "Create users, assign roles, and manage hospital access.", "Administration"),
+            "administration/registration-requests" => ("Pending Account Request", "Approve or reject self-service sign-ups before accounts are created.", "Administration"),
+            "administration/activity-log" => ("System Activity Log", "Audit trail of administrative and workflow actions.", "Administration"),
             "profile" => ("My Profile", "Update your account details and password.", "Account"),
             _ => ("Geneflux LIS", "Laboratory information system", "Dashboards")
         };

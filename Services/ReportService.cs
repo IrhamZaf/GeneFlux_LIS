@@ -62,8 +62,6 @@ public class ReportService
         var report = await GetByIdAsync(id);
         if (report == null || !CanAccessReport(actor, report))
             return null;
-        if (actor.Role == UserRole.Doctor && report.Status != ReportStatus.Approved)
-            return null;
         return report;
     }
 
@@ -172,7 +170,7 @@ public class ReportService
 
     public async Task<bool> DeleteAsync(int id, ApplicationUser actor)
     {
-        if (actor.Role != UserRole.SuperAdmin)
+        if (actor.Role is not (UserRole.SuperAdmin or UserRole.LabAdmin))
             return false;
 
         await using var context = await _contextFactory.CreateDbContextAsync();
@@ -262,6 +260,46 @@ public class ReportService
         return report;
     }
 
+    /// <summary>
+    /// Archives approved reports whose approval (or last update) is older than <paramref name="minAge"/>.
+    /// Uses the first active Super Admin user id for <see cref="Report.UpdatedByUserId"/> when present; audit entries use system actor.
+    /// </summary>
+    public async Task<int> AutoArchiveApprovedReportsAsync(TimeSpan minAge, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var actorId = await context.Users
+            .Where(u => u.Role == UserRole.SuperAdmin && u.IsActive)
+            .OrderBy(u => u.Id)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (string.IsNullOrEmpty(actorId))
+            return 0;
+
+        var cutoff = DateTime.UtcNow - minAge;
+        var reports = await context.Reports
+            .Where(r => r.Status == ReportStatus.Approved)
+            .Where(r => (r.ApprovedAt ?? r.UpdatedAt) < cutoff)
+            .ToListAsync(cancellationToken);
+
+        foreach (var report in reports)
+        {
+            report.Archive();
+            report.UpdatedByUserId = actorId;
+        }
+
+        if (reports.Count > 0)
+            await context.SaveChangesAsync(cancellationToken);
+
+        foreach (var report in reports)
+        {
+            await _auditLogService.WriteAsync("ReportArchived", "Report", report.Id.ToString(), null,
+                metadata: new { report.ReferenceNumber, AutoArchived = true });
+        }
+
+        return reports.Count;
+    }
+
     private static IQueryable<Report> BuildReportQuery(ApplicationDbContext context, ReportFilter filter, bool includeStatusFilter = true)
     {
         var query = context.Reports
@@ -274,9 +312,14 @@ public class ReportService
 
         query = ApplyAccessScope(query, filter);
 
-        // Doctors only consume released results; drafts and pipeline statuses stay with lab roles.
-        if (filter.UserRole == UserRole.Doctor)
-            query = query.Where(r => r.Status == ReportStatus.Approved);
+        // Doctor / head nurse / lab manager Reports tabs: "Pending" = Draft + PendingReview; "Completed" = Approved + Archived; "All" = no extra status slice (still access-scoped).
+        if (filter.UserRole is UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager)
+        {
+            if (string.Equals(filter.DoctorWorkspaceTab, "pending", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(r => r.Status == ReportStatus.Draft || r.Status == ReportStatus.PendingReview);
+            else if (string.Equals(filter.DoctorWorkspaceTab, "completed", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(r => r.Status == ReportStatus.Approved || r.Status == ReportStatus.Archived);
+        }
 
         if (filter.FilterHospitalId.HasValue)
             query = query.Where(r => r.HospitalId == filter.FilterHospitalId.Value);
@@ -297,11 +340,26 @@ public class ReportService
         if (!string.IsNullOrWhiteSpace(filter.MRN))
             query = query.Where(r => r.Patient.MRN != null && r.Patient.MRN.Contains(filter.MRN));
 
+        if (!string.IsNullOrWhiteSpace(filter.PassportNo))
+            query = query.Where(r =>
+                r.Patient.PassportNo != null &&
+                r.Patient.PassportNo.Contains(filter.PassportNo.Trim()));
+
+        if (!string.IsNullOrWhiteSpace(filter.DoctorSpecialty))
+            query = query.Where(r =>
+                r.Doctor.Specialty != null &&
+                r.Doctor.Specialty.Contains(filter.DoctorSpecialty.Trim()));
+
         if (filter.FilterTestId.HasValue)
             query = query.Where(r => r.TestId == filter.FilterTestId.Value);
 
-        if (includeStatusFilter && filter.Status.HasValue)
-            query = query.Where(r => r.Status == filter.Status.Value);
+        if (filter.UserRole is not (UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager))
+        {
+            if (filter.SubmittedOnlyTab)
+                query = query.Where(r => r.Status != ReportStatus.Draft);
+            else if (includeStatusFilter && filter.Status.HasValue)
+                query = query.Where(r => r.Status == filter.Status.Value);
+        }
 
         if (filter.DateFrom.HasValue)
             query = query.Where(r => r.CreatedAt >= filter.DateFrom.Value);
@@ -327,7 +385,7 @@ public class ReportService
 
     private static IQueryable<Report> ApplyAccessScope(IQueryable<Report> query, ReportFilter filter)
     {
-        if (filter.UserRole == UserRole.SuperAdmin)
+        if (filter.UserRole is UserRole.SuperAdmin or UserRole.LabAdmin)
             return query;
 
         var hospitalIds = GetAccessibleHospitalIds(filter);
@@ -369,9 +427,9 @@ public class ReportService
 
         return actor.Role switch
         {
-            UserRole.SuperAdmin => true,
+            UserRole.SuperAdmin or UserRole.LabAdmin => true,
             UserRole.Doctor => DoctorHasReportAccess(actor, report),
-            UserRole.LabAdmin or UserRole.HeadNurse or UserRole.LabManager => GetAccessibleHospitalIds(actor).Contains(report.HospitalId),
+            UserRole.HeadNurse or UserRole.LabManager => GetAccessibleHospitalIds(actor).Contains(report.HospitalId),
             _ => false
         };
     }
@@ -402,7 +460,7 @@ public class ReportService
 
     private static void EnsureHospitalAccess(ApplicationUser actor, int hospitalId)
     {
-        if (actor.Role == UserRole.SuperAdmin)
+        if (actor.Role is UserRole.SuperAdmin or UserRole.LabAdmin)
             return;
 
         if (!GetAccessibleHospitalIds(actor).Contains(hospitalId))
@@ -485,11 +543,21 @@ public class ReportFilter
     public string? PatientName { get; set; }
     public string? NRIC { get; set; }
     public string? MRN { get; set; }
+    /// <summary>Partial match on patient passport number.</summary>
+    public string? PassportNo { get; set; }
+    /// <summary>Partial match on doctor specialty.</summary>
+    public string? DoctorSpecialty { get; set; }
     public int? FilterTestId { get; set; }
     public DateTime? DateFrom { get; set; }
     public DateTime? DateTo { get; set; }
     public string? SearchTerm { get; set; }
     public ReportStatus? Status { get; set; }
+
+    /// <summary>Tab filter: all non-draft statuses (PendingReview, Approved, Archived).</summary>
+    public bool SubmittedOnlyTab { get; set; }
+
+    /// <summary>For <see cref="UserRole.Doctor"/>, <see cref="UserRole.HeadNurse"/>, <see cref="UserRole.LabManager"/> list tabs: <c>all</c>, <c>pending</c> (draft + pending review), <c>completed</c> (approved + archived).</summary>
+    public string? DoctorWorkspaceTab { get; set; }
 
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 10;
@@ -506,6 +574,8 @@ public class ReportFilter
             if (!string.IsNullOrWhiteSpace(PatientName)) count++;
             if (!string.IsNullOrWhiteSpace(NRIC)) count++;
             if (!string.IsNullOrWhiteSpace(MRN)) count++;
+            if (!string.IsNullOrWhiteSpace(PassportNo)) count++;
+            if (!string.IsNullOrWhiteSpace(DoctorSpecialty)) count++;
             if (FilterTestId.HasValue) count++;
             if (DateFrom.HasValue) count++;
             if (DateTo.HasValue) count++;

@@ -1,4 +1,5 @@
 @inject IJSRuntime JS
+@using LIS.Models
 @using LIS.Services
 @implements IAsyncDisposable
 
@@ -12,84 +13,276 @@
         </div>
     </div>
     <div class="card-body pt-0">
-        <div class="row g-3">
-            @if (ShowHospital)
-            {
-                <div class="col-xl-3 col-md-6">
-                    <label class="form-label">Hospital Name</label>
-                    <input class="form-control"
-                           placeholder="Search hospital name"
-                           value="@Filter.HospitalSearch"
-                           @oninput="OnHospitalSearchInput" />
-                </div>
-            }
-
-            @if (ShowDoctor)
-            {
-                <div class="col-xl-3 col-md-6">
+        @if (HospitalStaffCompactLayout)
+        {
+            @* Head nurse / lab manager: doctor name (text) + patient row, then passport / test / dates (4 per row on xl). *@
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-2 row-cols-xl-4 g-3">
+                <div class="col">
                     <label class="form-label">Doctor Name</label>
                     <input class="form-control"
                            placeholder="Search doctor name"
                            value="@Filter.DoctorSearch"
                            @oninput="OnDoctorSearchInput" />
                 </div>
-            }
-
-            <div class="col-xl-3 col-md-6">
-                <label class="form-label">Patient Name</label>
-                <input class="form-control"
-                       placeholder="Search patient name"
-                       value="@Filter.PatientName"
-                       @oninput="OnPatientNameInput" />
+                <div class="col">
+                    <label class="form-label">Patient Name</label>
+                    <input class="form-control"
+                           placeholder="Search patient name"
+                           value="@Filter.PatientName"
+                           @oninput="OnPatientNameInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient MRN No.</label>
+                    <input class="form-control"
+                           placeholder="Search MRN"
+                           value="@Filter.MRN"
+                           @oninput="OnMrnInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient NRIC</label>
+                    <input type="text"
+                           class="form-control"
+                           placeholder="000000-00-0000"
+                           inputmode="numeric"
+                           autocomplete="off"
+                           maxlength="14"
+                           value="@Filter.NRIC"
+                           @oninput="OnNricInput" />
+                </div>
             </div>
-
-            <div class="col-xl-3 col-md-6">
-                <label class="form-label">Patient NRIC</label>
-                <input type="text"
-                       class="form-control"
-                       placeholder="000000-00-0000"
-                       inputmode="numeric"
-                       autocomplete="off"
-                       maxlength="14"
-                       value="@Filter.NRIC"
-                       @oninput="OnNricInput" />
-            </div>
-
-            <div class="col-xl-3 col-md-6">
-                <label class="form-label">Patient MRN Number</label>
-                <input class="form-control"
-                       placeholder="Search MRN"
-                       value="@Filter.MRN"
-                       @oninput="OnMrnInput" />
-            </div>
-
-            @if (ShowTest)
-            {
-                <div class="col-xl-3 col-md-6">
-                    <label class="form-label">Test</label>
-                    <select class="form-select" @bind="Filter.FilterTestId" @bind:after="ApplyFiltersImmediateAsync">
-                        <option value="">All tests</option>
-                        @foreach (var t in Tests)
-                        {
-                            <option value="@t.Id">@t.Name</option>
-                        }
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-2 row-cols-xl-4 g-3 mt-1">
+                <div class="col">
+                    <label class="form-label">Patient Passport No.</label>
+                    <input class="form-control"
+                           placeholder="Passport number"
+                           value="@Filter.PassportNo"
+                           @oninput="OnPassportInput" />
+                </div>
+                @if (ShowTest)
+                {
+                    <div class="col">
+                        <label class="form-label">Test Name</label>
+                        <select class="form-select" @bind="Filter.FilterTestId" @bind:after="ApplyFiltersImmediateAsync">
+                            <option value="">All tests</option>
+                            @foreach (var t in Tests)
+                            {
+                                <option value="@t.Id">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="col">
+                    <label class="form-label">Preset Date Selection</label>
+                    <select class="form-select" @bind="_presetKey" @bind:after="ApplyPresetAsync">
+                        <option value="">All time</option>
+                        <option value="week">Past 1 week</option>
+                        <option value="month">Past 1 month</option>
+                        <option value="3months">Past 3 months</option>
+                        <option value="6months">Past 6 months</option>
+                        <option value="year">Past 1 year</option>
                     </select>
                 </div>
-            }
-
-            <div class="col-xl-3 col-md-6">
-                <label class="form-label">Date Range</label>
-                <div class="input-group">
-                    <span class="input-group-text"><i class="icon-base ti tabler-calendar"></i></span>
-                    <input id="@_dateRangeInputId"
-                           class="form-control"
-                           placeholder="Select date range"
-                           autocomplete="off"
-                           readonly />
+                <div class="col">
+                    <label class="form-label">Custom Date Range</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="icon-base ti tabler-calendar"></i></span>
+                        <input id="@_dateRangeInputId"
+                               class="form-control"
+                               placeholder="Select date range"
+                               autocomplete="off"
+                               readonly />
+                    </div>
                 </div>
             </div>
-        </div>
+        }
+        else if (DoctorCompactLayout)
+        {
+            @* Clinical doctor: 4 fields per row on xl, then test + date filters. *@
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-2 row-cols-xl-4 g-3">
+                <div class="col">
+                    <label class="form-label">Patient Name</label>
+                    <input class="form-control"
+                           placeholder="Search patient name"
+                           value="@Filter.PatientName"
+                           @oninput="OnPatientNameInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient MRN No.</label>
+                    <input class="form-control"
+                           placeholder="Search MRN"
+                           value="@Filter.MRN"
+                           @oninput="OnMrnInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient NRIC</label>
+                    <input type="text"
+                           class="form-control"
+                           placeholder="000000-00-0000"
+                           inputmode="numeric"
+                           autocomplete="off"
+                           maxlength="14"
+                           value="@Filter.NRIC"
+                           @oninput="OnNricInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient Passport No.</label>
+                    <input class="form-control"
+                           placeholder="Passport number"
+                           value="@Filter.PassportNo"
+                           @oninput="OnPassportInput" />
+                </div>
+            </div>
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 mt-1">
+                @if (ShowTest)
+                {
+                    <div class="col">
+                        <label class="form-label">Test Name</label>
+                        <select class="form-select" @bind="Filter.FilterTestId" @bind:after="ApplyFiltersImmediateAsync">
+                            <option value="">All tests</option>
+                            @foreach (var t in Tests)
+                            {
+                                <option value="@t.Id">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="col">
+                    <label class="form-label">Preset Date Range</label>
+                    <select class="form-select" @bind="_presetKey" @bind:after="ApplyPresetAsync">
+                        <option value="">All time</option>
+                        <option value="week">Past 1 week</option>
+                        <option value="month">Past 1 month</option>
+                        <option value="3months">Past 3 months</option>
+                        <option value="6months">Past 6 months</option>
+                        <option value="year">Past 1 year</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Custom Date Range</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="icon-base ti tabler-calendar"></i></span>
+                        <input id="@_dateRangeInputId"
+                               class="form-control"
+                               placeholder="Select date range"
+                               autocomplete="off"
+                               readonly />
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            @* Row 1: Hospital | Doctor | Specialization (when doctor filter shown) | Patient Name | MRN *@
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5 g-3">
+                @if (ShowHospital)
+                {
+                    <div class="col">
+                        <label class="form-label">Hospital Name</label>
+                        <select class="form-select" value="@HospitalSelectValue" @onchange="OnHospitalSelectAsync">
+                            <option value="">All hospitals</option>
+                            @foreach (var h in Hospitals)
+                            {
+                                <option value="@h.Id">@h.Name</option>
+                            }
+                        </select>
+                    </div>
+                }
+                @if (ShowDoctor)
+                {
+                    <div class="col">
+                        <label class="form-label">Doctor Name</label>
+                        <select class="form-select" value="@DoctorSelectValue" @onchange="OnDoctorSelectAsync">
+                            <option value="">All doctors</option>
+                            @foreach (var d in Doctors)
+                            {
+                                <option value="@d.Id">@d.Name</option>
+                            }
+                        </select>
+                    </div>
+                }
+                @if (ShowDoctor)
+                {
+                    <div class="col">
+                        <label class="form-label">Doctor&apos;s Specialization</label>
+                        <input class="form-control"
+                               placeholder="Search specialization"
+                               value="@Filter.DoctorSpecialty"
+                               @oninput="OnSpecialtyInput" />
+                    </div>
+                }
+                <div class="col">
+                    <label class="form-label">Patient Name</label>
+                    <input class="form-control"
+                           placeholder="Search patient name"
+                           value="@Filter.PatientName"
+                           @oninput="OnPatientNameInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient MRN No.</label>
+                    <input class="form-control"
+                           placeholder="Search MRN"
+                           value="@Filter.MRN"
+                           @oninput="OnMrnInput" />
+                </div>
+            </div>
 
+            @* Row 2: NRIC | Passport | Test | Preset date | Custom range *@
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-5 g-3 mt-1">
+                <div class="col">
+                    <label class="form-label">Patient NRIC</label>
+                    <input type="text"
+                           class="form-control"
+                           placeholder="000000-00-0000"
+                           inputmode="numeric"
+                           autocomplete="off"
+                           maxlength="14"
+                           value="@Filter.NRIC"
+                           @oninput="OnNricInput" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Patient Passport No.</label>
+                    <input class="form-control"
+                           placeholder="Passport number"
+                           value="@Filter.PassportNo"
+                           @oninput="OnPassportInput" />
+                </div>
+                @if (ShowTest)
+                {
+                    <div class="col">
+                        <label class="form-label">Test</label>
+                        <select class="form-select" @bind="Filter.FilterTestId" @bind:after="ApplyFiltersImmediateAsync">
+                            <option value="">All tests</option>
+                            @foreach (var t in Tests)
+                            {
+                                <option value="@t.Id">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="col">
+                    <label class="form-label">Preset Date Selection</label>
+                    <select class="form-select" @bind="_presetKey" @bind:after="ApplyPresetAsync">
+                        <option value="">All time</option>
+                        <option value="week">Past 1 week</option>
+                        <option value="month">Past 1 month</option>
+                        <option value="3months">Past 3 months</option>
+                        <option value="6months">Past 6 months</option>
+                        <option value="year">Past 1 year</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Custom Date Range</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="icon-base ti tabler-calendar"></i></span>
+                        <input id="@_dateRangeInputId"
+                               class="form-control"
+                               placeholder="Select date range"
+                               autocomplete="off"
+                               readonly />
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 </div>
 
@@ -101,12 +294,20 @@
     [Parameter] public bool ShowHospital { get; set; } = true;
     [Parameter] public bool ShowDoctor { get; set; } = true;
     [Parameter] public bool ShowTest { get; set; } = true;
+    /// <summary>Doctor reports filter: 4-wide patient row + test / preset / custom row (no hospital/doctor/specialty).</summary>
+    [Parameter] public bool DoctorCompactLayout { get; set; }
+
+    /// <summary>Head nurse / lab manager: 4-wide rows; doctor name as text search (<see cref="ReportFilter.DoctorSearch"/>); no doctor dropdown or specialization.</summary>
+    [Parameter] public bool HospitalStaffCompactLayout { get; set; }
 
     [Parameter] public List<Test> Tests { get; set; } = new();
+    [Parameter] public List<Hospital> Hospitals { get; set; } = new();
+    [Parameter] public List<Doctor> Doctors { get; set; } = new();
 
     private readonly string _dateRangeInputId = $"reportDateRange_{Guid.NewGuid():N}";
     private DotNetObjectReference<FilterPanel>? _dotNetRef;
     private CancellationTokenSource? _textDebounce;
+    private string _presetKey = "";
 
     private const int TextDebounceMs = 350;
 
@@ -132,6 +333,7 @@
     [JSInvokable]
     public async Task SetDateRangeFromPicker(string? startDate, string? endDate)
     {
+        _presetKey = "";
         Filter.DateFrom = DateTime.TryParse(startDate, out var start) ? start : null;
         Filter.DateTo = DateTime.TryParse(endDate, out var end) ? end : null;
         await ApplyFiltersImmediateAsync();
@@ -142,15 +344,61 @@
         await OnApply.InvokeAsync();
     }
 
-    private async Task OnHospitalSearchInput(ChangeEventArgs e)
+    private string HospitalSelectValue => Filter.FilterHospitalId?.ToString() ?? "";
+    private string DoctorSelectValue => Filter.FilterDoctorId?.ToString() ?? "";
+
+    private async Task ApplyPresetAsync()
     {
-        Filter.HospitalSearch = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
-        await DebouncedApplyAsync();
+        if (string.IsNullOrEmpty(_presetKey))
+        {
+            Filter.DateFrom = null;
+            Filter.DateTo = null;
+        }
+        else
+        {
+            var today = DateTime.UtcNow.Date;
+            Filter.DateFrom = _presetKey switch
+            {
+                "week" => today.AddDays(-7),
+                "month" => today.AddMonths(-1),
+                "3months" => today.AddMonths(-3),
+                "6months" => today.AddMonths(-6),
+                "year" => today.AddYears(-1),
+                _ => today
+            };
+            Filter.DateTo = today;
+        }
+
+        await InitDateRangePickerAsync();
+        await OnApply.InvokeAsync();
+    }
+
+    private async Task OnHospitalSelectAsync(ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        Filter.FilterHospitalId = int.TryParse(v, out var id) ? id : null;
+        Filter.HospitalSearch = null;
+        await OnApply.InvokeAsync();
+    }
+
+    private async Task OnDoctorSelectAsync(ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        Filter.FilterDoctorId = int.TryParse(v, out var id) ? id : null;
+        Filter.DoctorSearch = null;
+        await OnApply.InvokeAsync();
     }
 
     private async Task OnDoctorSearchInput(ChangeEventArgs e)
     {
-        Filter.DoctorSearch = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
+        Filter.DoctorSearch = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString()?.Trim();
+        Filter.FilterDoctorId = null;
+        await DebouncedApplyAsync();
+    }
+
+    private async Task OnSpecialtyInput(ChangeEventArgs e)
+    {
+        Filter.DoctorSpecialty = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
         await DebouncedApplyAsync();
     }
 
@@ -170,6 +418,12 @@
     private async Task OnMrnInput(ChangeEventArgs e)
     {
         Filter.MRN = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString();
+        await DebouncedApplyAsync();
+    }
+
+    private async Task OnPassportInput(ChangeEventArgs e)
+    {
+        Filter.PassportNo = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value?.ToString()?.Trim();
         await DebouncedApplyAsync();
     }
 
@@ -200,10 +454,13 @@
         Filter.PatientName = null;
         Filter.NRIC = null;
         Filter.MRN = null;
+        Filter.PassportNo = null;
+        Filter.DoctorSpecialty = null;
         Filter.FilterTestId = null;
         Filter.DateFrom = null;
         Filter.DateTo = null;
         Filter.SearchTerm = null;
+        _presetKey = "";
         await InitDateRangePickerAsync();
         await OnReset.InvokeAsync();
     }
@@ -219,7 +476,6 @@
         }
         catch
         {
-            // The JS runtime may already be gone during circuit disposal.
         }
 
         _dotNetRef?.Dispose();

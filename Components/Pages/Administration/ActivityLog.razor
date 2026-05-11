@@ -1,0 +1,68 @@
+@page "/administration/activity-log"
+@attribute [Authorize(Roles = "SuperAdmin,LabAdmin,Admin")]
+@inject AuditLogService AuditLogService
+
+<PageTitle>System Activity Log - Geneflux LIS</PageTitle>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header border-0">
+        <h4 class="card-title mb-1">System Activity Log</h4>
+        <p class="text-muted mb-0">Audit trail of administrative and workflow actions.</p>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-lg-4">
+                <label class="form-label">Filter by action</label>
+                <input class="form-control" placeholder="e.g. ReportApproved" @bind="_auditFilter.Action" />
+            </div>
+            <div class="col-lg-4">
+                <label class="form-label">Filter by entity</label>
+                <input class="form-control" placeholder="e.g. Report" @bind="_auditFilter.EntityType" />
+            </div>
+            <div class="col-lg-4 d-flex align-items-end">
+                <button type="button" class="btn btn-label-primary w-100" @onclick="LoadAuditLogs">Refresh</button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Entity</th>
+                        <th>Entity Id</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in _auditLogs)
+                    {
+                        <tr>
+                            <td>@log.PerformedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>@log.PerformedByName</td>
+                            <td>@log.Action</td>
+                            <td>@log.EntityType</td>
+                            <td>@log.EntityId</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<AuditLog> _auditLogs = new();
+    private AuditLogFilter _auditFilter = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditLogs();
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        _auditLogs = await AuditLogService.GetAsync(_auditFilter);
+    }
+}

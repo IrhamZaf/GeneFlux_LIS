@@ -1,5 +1,6 @@
 @page "/reports"
 @attribute [Authorize]
+@using LIS.Models
 @inject ReportService ReportService
 @inject DropdownService DropdownService
 @inject ToastService ToastService
@@ -45,7 +46,11 @@ else
                          OnReset="ResetFilters"
                          ShowHospital="_showHospitalFilter"
                          ShowDoctor="_showDoctorFilter"
-                         Tests="_tests" />
+                         DoctorCompactLayout="_isDoctor"
+                         HospitalStaffCompactLayout="_isHospitalStaffCompactFilter"
+                         Tests="_tests"
+                         Hospitals="_hospitals"
+                         Doctors="_doctors" />
         </div>
     }
 
@@ -69,31 +74,71 @@ else
                     }
                 </div>
             </div>
-            @if (!_isDoctor)
+            @if (_isClinicalWorkspace)
             {
                 <div class="mt-3 border-top pt-3">
                     <ul class="nav nav-pills flex-wrap gap-2">
                         <li class="nav-item">
                             <button type="button"
-                                    class='nav-link @(_activeStatus == null ? "active" : "")'
+                                    class='nav-link @(_doctorWorkspaceTab == "all" ? "active" : "")'
                                     disabled="@_showDialog"
-                                    @onclick="SelectAllStatuses">
+                                    @onclick="SelectDoctorAllTab">
                                 All
-                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetAllStatusesCount()</span>
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetDoctorAllTabCount()</span>
                             </button>
                         </li>
-                        @foreach (var status in _statusTabs)
-                        {
-                            <li class="nav-item">
-                                <button type="button"
-                                        class='nav-link @(_activeStatus == status ? "active" : "")'
-                                        disabled="@_showDialog"
-                                        @onclick="() => ChangeStatus(status)">
-                                    @GetStatusLabel(status)
-                                    <span class="badge rounded-pill bg-white text-dark ms-2">@GetStatusCount(status)</span>
-                                </button>
-                            </li>
-                        }
+                        <li class="nav-item">
+                            <button type="button"
+                                    class='nav-link @(_doctorWorkspaceTab == "completed" ? "active" : "")'
+                                    disabled="@_showDialog"
+                                    @onclick="SelectDoctorCompletedTab">
+                                Completed
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetDoctorCompletedTabCount()</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button type="button"
+                                    class='nav-link @(_doctorWorkspaceTab == "pending" ? "active" : "")'
+                                    disabled="@_showDialog"
+                                    @onclick="SelectDoctorPendingTab">
+                                Pending Reports
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetDoctorPendingTabCount()</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            }
+            else
+            {
+                <div class="mt-3 border-top pt-3">
+                    <ul class="nav nav-pills flex-wrap gap-2">
+                        <li class="nav-item">
+                            <button type="button"
+                                    class='nav-link @(_workspaceTab == "all" ? "active" : "")'
+                                    disabled="@_showDialog"
+                                    @onclick="SelectAllWorkspaceTab">
+                                All
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetAllWorkspaceCount()</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button type="button"
+                                    class='nav-link @(_workspaceTab == "draft" ? "active" : "")'
+                                    disabled="@_showDialog"
+                                    @onclick="SelectDraftWorkspaceTab">
+                                Draft
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetStatusCount(ReportStatus.Draft)</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button type="button"
+                                    class='nav-link @(_workspaceTab == "submitted" ? "active" : "")'
+                                    disabled="@_showDialog"
+                                    @onclick="SelectSubmittedWorkspaceTab">
+                                Submitted
+                                <span class="badge rounded-pill bg-white text-dark ms-2">@GetSubmittedPipelineCount()</span>
+                            </button>
+                        </li>
                     </ul>
                 </div>
             }
@@ -103,14 +148,23 @@ else
                 <thead>
                     <tr>
                         <th class="text-uppercase small fw-bold">Ref No.</th>
-                        <th class="text-uppercase small fw-bold">Patient</th>
-                        <th class="text-uppercase small fw-bold">Identity</th>
-                        <th class="text-uppercase small fw-bold">MRN</th>
-                        <th class="text-uppercase small fw-bold">Hospital</th>
-                        <th class="text-uppercase small fw-bold">Doctor</th>
-                        <th class="text-uppercase small fw-bold">Test</th>
+                        @if (_isHospitalStaffTable)
+                        {
+                            <th class="text-uppercase small fw-bold">Doctor Name</th>
+                        }
+                        else if (!_isDoctor)
+                        {
+                            <th class="text-uppercase small fw-bold">Hospital Name</th>
+                            <th class="text-uppercase small fw-bold">Doctor Name</th>
+                            <th class="text-uppercase small fw-bold">Specialization</th>
+                        }
+                        <th class="text-uppercase small fw-bold">Patient Name</th>
+                        <th class="text-uppercase small fw-bold">Patient MRN No.</th>
+                        <th class="text-uppercase small fw-bold">Patient NRIC</th>
+                        <th class="text-uppercase small fw-bold">Patient Passport No.</th>
+                        <th class="text-uppercase small fw-bold">Test Name</th>
+                        <th class="text-uppercase small fw-bold">Reporting Date &amp; Time</th>
                         <th class="text-uppercase small fw-bold">Status</th>
-                        <th class="text-uppercase small fw-bold">Updated</th>
                         <th class="text-end text-uppercase small fw-bold">Actions</th>
                     </tr>
                 </thead>
@@ -118,7 +172,7 @@ else
                     @if (_reports.Count == 0)
                     {
                         <tr>
-                            <td colspan="10" class="text-center py-4 text-muted">
+                            <td colspan="@TableColSpan" class="text-center py-4 text-muted">
                                 No reports found for @GetActiveFilterLabel(). Try adjusting your filters.
                             </td>
                         </tr>
@@ -129,14 +183,23 @@ else
                         {
                             <tr>
                                 <td class="fw-semibold">@report.ReferenceNumber</td>
+                                @if (_isHospitalStaffTable)
+                                {
+                                    <td>@report.Doctor?.Name</td>
+                                }
+                                else if (!_isDoctor)
+                                {
+                                    <td>@report.Hospital?.Name</td>
+                                    <td>@report.Doctor?.Name</td>
+                                    <td>@(report.Doctor?.Specialty ?? "—")</td>
+                                }
                                 <td>@report.Patient?.Name</td>
-                                <td>@report.Patient?.IdentityNumber</td>
                                 <td>@report.Patient?.MRN</td>
-                                <td>@report.Hospital?.Name</td>
-                                <td>@report.Doctor?.Name</td>
+                                <td>@(_isClinicalWorkspace ? (report.Patient?.NRIC ?? "—") : (report.Patient?.IdentityType == IdentityType.NRIC ? (report.Patient.NRIC ?? "—") : "—"))</td>
+                                <td>@(report.Patient?.PassportNo ?? "—")</td>
                                 <td>@report.Test?.Name</td>
-                                <td><span class="badge @GetStatusBadge(report.Status)">@GetStatusLabel(report.Status)</span></td>
-                                <td>@report.UpdatedAt.ToString("dd/MM/yyyy")</td>
+                                <td>@FormatReportingDateTime(report)</td>
+                                <td><span class="badge @GetRowStatusBadge(report.Status)">@GetRowStatusLabel(report.Status)</span></td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end gap-2 px-2">
                                         @foreach (var action in GetActions(report))
@@ -213,16 +276,10 @@ else
 }
 
 @code {
-    private readonly ReportStatus[] _statusTabs =
-    [
-        ReportStatus.Draft,
-        ReportStatus.PendingReview,
-        ReportStatus.Approved,
-        ReportStatus.Archived
-    ];
-
     private List<Report> _reports = new();
     private List<Test> _tests = new();
+    private List<Hospital> _hospitals = new();
+    private List<Doctor> _doctors = new();
     private Dictionary<ReportStatus, int> _statusCounts = new();
     private ReportFilter _filter = new();
     private int _totalCount;
@@ -239,12 +296,23 @@ else
     private Report? _selectedReport;
     private ApplicationUser? _currentUser;
     private bool _isDoctor;
-    /// <summary>Null means "All" statuses tab is selected.</summary>
-    private ReportStatus? _activeStatus = ReportStatus.Draft;
+    private bool _isClinicalWorkspace;
+    private bool _isHospitalStaffTable;
+    /// <summary>For lab workspace tabs: all | draft | submitted.</summary>
+    private string _workspaceTab = "all";
+
+    /// <summary>For doctor / head nurse / lab manager tabs: all | completed | pending (maps to <see cref="ReportFilter.DoctorWorkspaceTab"/>).</summary>
+    private string _doctorWorkspaceTab = "all";
 
     private bool _canCreateReports => _currentUser != null && RoleAccess.CanCreateReports(_currentUser.Role);
     private bool _showHospitalFilter => _currentUser?.Role is UserRole.SuperAdmin or UserRole.LabAdmin;
     private bool _showDoctorFilter => _currentUser?.Role is not UserRole.Doctor;
+    /// <summary>Head nurse / lab manager filter panel (no hospital row; doctor name as text).</summary>
+    private bool _isHospitalStaffCompactFilter =>
+        _currentUser?.Role is UserRole.HeadNurse or UserRole.LabManager;
+
+    private int TableColSpan => _isDoctor ? 9 : _isHospitalStaffTable ? 10 : 12;
+
     private int TotalPages => (int)Math.Ceiling((double)_totalCount / _filter.PageSize);
 
     protected override async Task OnInitializedAsync()
@@ -270,18 +338,25 @@ else
         _filter.HospitalId = _currentUser.HospitalId;
         _filter.AccessibleHospitalIds = CurrentUserService.GetAccessibleHospitalIds(_currentUser).ToList();
         _isDoctor = _currentUser.Role == UserRole.Doctor;
-        if (_isDoctor)
+        _isHospitalStaffTable = _currentUser.Role is UserRole.HeadNurse or UserRole.LabManager;
+        _isClinicalWorkspace = _currentUser.Role is UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager;
+        if (_isClinicalWorkspace)
         {
-            _activeStatus = ReportStatus.Approved;
-            _filter.Status = ReportStatus.Approved;
+            _filter.Status = null;
+            _filter.SubmittedOnlyTab = false;
+            _filter.DoctorWorkspaceTab = "all";
+            _doctorWorkspaceTab = "all";
         }
         else
         {
-            _activeStatus = null;
+            _workspaceTab = "all";
             _filter.Status = null;
+            _filter.SubmittedOnlyTab = false;
         }
 
         _tests = await DropdownService.GetTestsAsync();
+        _hospitals = await DropdownService.GetHospitalsAsync();
+        _doctors = await DropdownService.GetDoctorsAsync(_filter.FilterHospitalId);
 
         await RefreshData();
         _loading = false;
@@ -323,59 +398,159 @@ else
             PatientName = _filter.PatientName,
             NRIC = _filter.NRIC,
             MRN = _filter.MRN,
+            PassportNo = _filter.PassportNo,
+            DoctorSpecialty = _filter.DoctorSpecialty,
             FilterTestId = _filter.FilterTestId,
             DateFrom = _filter.DateFrom,
             DateTo = _filter.DateTo,
-            SearchTerm = _filter.SearchTerm
+            SearchTerm = _filter.SearchTerm,
+            SubmittedOnlyTab = false,
+            DoctorWorkspaceTab = null,
+            Status = null
         });
     }
 
     private async Task ApplyFilters()
     {
         _filter.Page = 1;
+        _doctors = await DropdownService.GetDoctorsAsync(_filter.FilterHospitalId);
         await RefreshData();
     }
 
     private async Task ResetFilters()
     {
         _filter.Page = 1;
+        if (_isClinicalWorkspace)
+        {
+            _doctorWorkspaceTab = "all";
+            _filter.DoctorWorkspaceTab = "all";
+        }
+
+        _doctors = await DropdownService.GetDoctorsAsync(null);
         await RefreshData();
     }
 
-    private async Task SelectAllStatuses()
+    private async Task SelectAllWorkspaceTab()
     {
-        _activeStatus = null;
+        _workspaceTab = "all";
         _filter.Status = null;
+        _filter.SubmittedOnlyTab = false;
         _filter.Page = 1;
         await LoadReports();
     }
 
-    private async Task ChangeStatus(ReportStatus status)
+    private async Task SelectDraftWorkspaceTab()
     {
-        _activeStatus = status;
-        _filter.Status = status;
+        _workspaceTab = "draft";
+        _filter.Status = ReportStatus.Draft;
+        _filter.SubmittedOnlyTab = false;
         _filter.Page = 1;
         await LoadReports();
     }
 
-    private int GetStatusCount(ReportStatus status)
+    private async Task SelectSubmittedWorkspaceTab()
     {
-        return _statusCounts.TryGetValue(status, out var count) ? count : 0;
+        _workspaceTab = "submitted";
+        _filter.Status = null;
+        _filter.SubmittedOnlyTab = true;
+        _filter.Page = 1;
+        await LoadReports();
     }
 
-    private int GetAllStatusesCount() => _statusCounts.Values.Sum();
+    private int GetStatusCount(ReportStatus status) =>
+        _statusCounts.TryGetValue(status, out var count) ? count : 0;
+
+    private int GetAllWorkspaceCount() => _statusCounts.Values.Sum();
+
+    private int GetSubmittedPipelineCount() =>
+        GetStatusCount(ReportStatus.PendingReview) +
+        GetStatusCount(ReportStatus.Approved) +
+        GetStatusCount(ReportStatus.Archived);
+
+    private int GetDoctorPendingTabCount() =>
+        GetStatusCount(ReportStatus.Draft) + GetStatusCount(ReportStatus.PendingReview);
+
+    private int GetDoctorCompletedTabCount() =>
+        GetStatusCount(ReportStatus.Approved) + GetStatusCount(ReportStatus.Archived);
+
+    private int GetDoctorAllTabCount() => _statusCounts.Values.Sum();
+
+    private async Task SelectDoctorAllTab()
+    {
+        _doctorWorkspaceTab = "all";
+        _filter.DoctorWorkspaceTab = "all";
+        _filter.Page = 1;
+        await LoadReports();
+    }
+
+    private async Task SelectDoctorCompletedTab()
+    {
+        _doctorWorkspaceTab = "completed";
+        _filter.DoctorWorkspaceTab = "completed";
+        _filter.Page = 1;
+        await LoadReports();
+    }
+
+    private async Task SelectDoctorPendingTab()
+    {
+        _doctorWorkspaceTab = "pending";
+        _filter.DoctorWorkspaceTab = "pending";
+        _filter.Page = 1;
+        await LoadReports();
+    }
 
     private string GetActiveFilterLabel() =>
-        _isDoctor
-            ? "approved reports"
-            : _activeStatus == null ? "all statuses" : GetStatusLabel(_activeStatus.Value);
+        _isClinicalWorkspace
+            ? _doctorWorkspaceTab switch
+            {
+                "pending" => "pending pipeline reports",
+                "completed" => "completed reports",
+                _ => _isDoctor ? "reports in your scope" : "reports in your hospitals"
+            }
+            : _workspaceTab == "all"
+                ? "all statuses"
+                : _workspaceTab == "draft"
+                    ? "draft reports"
+                    : "submitted reports";
 
     private string GetStatusDescriptionForActiveTab() =>
-        _isDoctor
-            ? GetStatusDescription(ReportStatus.Approved)
-            : _activeStatus == null
-                ? "All reports in your scope, every status."
-                : GetStatusDescription(_activeStatus.Value);
+        _isClinicalWorkspace
+            ? _doctorWorkspaceTab switch
+            {
+                "pending" => "Reports not yet completed (draft or pending review).",
+                "completed" => "Approved and archived reports you can view or download.",
+                _ => _isDoctor ? "All reports attributed to you." : "All reports in your assigned hospitals."
+            }
+            : _workspaceTab == "all"
+                ? "All reports in your scope."
+                : _workspaceTab == "draft"
+                    ? "Draft reports still being prepared."
+                    : "Submitted pipeline (pending review, approved, archived).";
+
+    private static string FormatReportingDateTime(Report report)
+    {
+        var dt = report.ReportingDate ?? report.UpdatedAt;
+        return dt.ToString("dd/MM/yyyy HH:mm");
+    }
+
+    private static string GetDisplayStatusLabel(ReportStatus status) =>
+        status == ReportStatus.Draft ? "Draft" : "Submitted";
+
+    private static string GetDisplayStatusBadge(ReportStatus status) =>
+        status == ReportStatus.Draft ? "bg-label-warning" : "bg-label-success";
+
+    private static bool IsDoctorPendingBucket(ReportStatus status) =>
+        status is ReportStatus.Draft or ReportStatus.PendingReview;
+
+    private string GetRowStatusLabel(ReportStatus status) =>
+        _isClinicalWorkspace
+            ? (IsDoctorPendingBucket(status) ? "Pending" : "Completed")
+            : GetDisplayStatusLabel(status);
+
+    private string GetRowStatusBadge(ReportStatus status) =>
+        _isClinicalWorkspace
+            ? (IsDoctorPendingBucket(status) ? "bg-label-warning" : "bg-label-success")
+            : GetDisplayStatusBadge(status);
 
     private async Task ChangePage(int page)
     {
@@ -429,7 +604,10 @@ else
 
         _uploadReportDialogKey = Guid.NewGuid();
         _selectedReport = await ReportService.GetByIdAsync(report.Id, _currentUser);
-        _dialogReadOnly = readOnly;
+        var forceClinicalReadOnly = _selectedReport != null &&
+                                    _currentUser.Role is (UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager) &&
+                                    IsDoctorPendingBucket(_selectedReport.Status);
+        _dialogReadOnly = readOnly || forceClinicalReadOnly;
         _showDialog = _selectedReport != null;
     }
 
@@ -439,66 +617,74 @@ else
         if (_currentUser == null)
             return actions;
 
-        switch (report.Status)
+        if (_currentUser.Role is UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager)
         {
-            case ReportStatus.Draft:
-                if (RoleAccess.CanEditDraftReports(_currentUser.Role))
+            if (IsDoctorPendingBucket(report.Status))
+                return actions;
+
+            actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
+            if ((report.Status == ReportStatus.Approved || report.Status == ReportStatus.Archived) &&
+                RoleAccess.CanDownloadReports(_currentUser.Role))
+            {
+                actions.Add(new("Download PDF", "btn-label-success", "icon-base ti tabler-file-type-pdf", () => DownloadPdf(report)));
+            }
+
+            return actions;
+        }
+
+        if (report.Status == ReportStatus.Draft)
+        {
+            if (RoleAccess.CanEditDraftReports(_currentUser.Role))
+            {
+                actions.Add(new("Edit report", "btn-label-primary", "icon-base ti tabler-edit", () => OpenDialog(report, false)));
+                if (RoleAccess.CanDeleteDraftReports(_currentUser.Role))
                 {
-                    actions.Add(new("Edit report", "btn-label-primary", "icon-base ti tabler-edit", () => OpenDialog(report, false)));
-                    if (RoleAccess.CanDeleteDraftReports(_currentUser.Role))
+                    actions.Add(new("Delete report", "btn-label-danger", "icon-base ti tabler-trash", () =>
                     {
-                        actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
-                        {
-                            _selectedReport = report;
-                            _showDeleteDialog = true;
-                            return Task.CompletedTask;
-                        }));
-                    }
-
-                    actions.Add(new("Submit for review", "btn-label-success", "icon-base ti tabler-send", () => SubmitReport(report)));
+                        _selectedReport = report;
+                        _showDeleteDialog = true;
+                        return Task.CompletedTask;
+                    }));
                 }
-                else
-                {
-                    actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
-                }
-                break;
-
-            case ReportStatus.PendingReview:
-                actions.Add(new("Review report", "btn-label-secondary", "icon-base ti tabler-eye-check", () => OpenDialog(report, true)));
-                if (_currentUser.Role == UserRole.SuperAdmin)
-                    actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
-                    {
-                        _selectedReport = report;
-                        _showDeleteDialog = true;
-                        return Task.CompletedTask;
-                    }));
-                break;
-
-            case ReportStatus.Approved:
+            }
+            else
+            {
                 actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
-                if (RoleAccess.CanDownloadReports(_currentUser.Role))
-                    actions.Add(new("Download PDF", "btn-label-success", "icon-base ti tabler-file-type-pdf", () => DownloadPdf(report)));
-                if (RoleAccess.CanArchiveReports(_currentUser.Role))
-                    actions.Add(new("Archive report", "btn-label-dark", "icon-base ti tabler-archive", () => ArchiveReport(report)));
-                if (_currentUser.Role == UserRole.SuperAdmin)
-                    actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
-                    {
-                        _selectedReport = report;
-                        _showDeleteDialog = true;
-                        return Task.CompletedTask;
-                    }));
-                break;
+            }
 
-            case ReportStatus.Archived:
-                actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
-                if (_currentUser.Role == UserRole.SuperAdmin)
-                    actions.Add(new("Delete", "btn-label-danger", "icon-base ti tabler-trash", () =>
-                    {
-                        _selectedReport = report;
-                        _showDeleteDialog = true;
-                        return Task.CompletedTask;
-                    }));
-                break;
+            return actions;
+        }
+
+        actions.Add(new("View report", "btn-label-secondary", "icon-base ti tabler-eye", () => OpenDialog(report, true)));
+
+        if (report.Status == ReportStatus.PendingReview && RoleAccess.CanEditDraftReports(_currentUser.Role))
+            actions.Add(new("Edit report", "btn-label-primary", "icon-base ti tabler-edit", () => OpenDialog(report, false)));
+
+        if (report.Status == ReportStatus.PendingReview && _currentUser.Role is UserRole.SuperAdmin or UserRole.LabAdmin)
+        {
+            actions.Add(new("Delete report", "btn-label-danger", "icon-base ti tabler-trash", () =>
+            {
+                _selectedReport = report;
+                _showDeleteDialog = true;
+                return Task.CompletedTask;
+            }));
+        }
+
+        if ((report.Status == ReportStatus.Approved || report.Status == ReportStatus.Archived) &&
+            RoleAccess.CanDownloadReports(_currentUser.Role))
+        {
+            actions.Add(new("Download PDF", "btn-label-success", "icon-base ti tabler-file-type-pdf", () => DownloadPdf(report)));
+        }
+
+        if (_currentUser.Role is UserRole.SuperAdmin or UserRole.LabAdmin &&
+            report.Status is ReportStatus.Approved or ReportStatus.Archived)
+        {
+            actions.Add(new("Delete report", "btn-label-danger", "icon-base ti tabler-trash", () =>
+            {
+                _selectedReport = report;
+                _showDeleteDialog = true;
+                return Task.CompletedTask;
+            }));
         }
 
         return actions;
@@ -665,7 +851,8 @@ else
                 return;
 
             var fullReport = await ReportService.GetByIdAsync(report.Id, _currentUser);
-            if (fullReport == null || fullReport.Status != ReportStatus.Approved)
+            if (fullReport == null ||
+                fullReport.Status is not (ReportStatus.Approved or ReportStatus.Archived))
                 return;
 
             var pdfBytes = PdfService.GenerateReportPdf(fullReport);

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using LIS.Models;
 
 namespace LIS.Data;
@@ -59,11 +60,18 @@ public static class SeedData
             "BEACON PRECISION DIAGNOSTICS SDN BHD", "HOSPITAL SULTANAH AMINAH JOHOR"
         };
 
+        // One round-trip: avoid N sequential EXISTS queries (very slow on remote SQL).
+        var existingHospitalNames = await context.Hospitals
+            .AsNoTracking()
+            .Select(h => h.Name)
+            .ToListAsync();
+        var hospitalNameSet = new HashSet<string>(existingHospitalNames, StringComparer.Ordinal);
         foreach (var name in hospitalNames)
         {
-            if (!context.Hospitals.Any(h => h.Name == name))
+            if (!hospitalNameSet.Contains(name))
             {
                 context.Hospitals.Add(new Hospital { Name = name, Address = "Kuala Lumpur / Selangor, Malaysia" });
+                hospitalNameSet.Add(name);
             }
         }
         await context.SaveChangesAsync();
@@ -119,12 +127,15 @@ public static class SeedData
             new() { Name = "Malaysian Allergy Panel (MA)", TestMethod = "ELISA" }
         };
 
+        var existingTestNames = await context.Tests
+            .AsNoTracking()
+            .Select(t => t.Name)
+            .ToListAsync();
+        var testNameSet = new HashSet<string>(existingTestNames, StringComparer.Ordinal);
         foreach (var test in testList)
         {
-            if (!context.Tests.Any(t => t.Name == test.Name))
-            {
+            if (testNameSet.Add(test.Name))
                 context.Tests.Add(test);
-            }
         }
         await context.SaveChangesAsync();
 

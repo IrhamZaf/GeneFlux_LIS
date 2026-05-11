@@ -1,5 +1,5 @@
 @page "/administration/hospitals"
-@attribute [Authorize(Roles = "SuperAdmin")]
+@attribute [Authorize(Roles = "SuperAdmin,LabAdmin,Admin")]
 @using LIS.Contracts.Administration
 @inject AdministrationService AdministrationService
 @inject CurrentUserService CurrentUserService
@@ -87,6 +87,9 @@ else
                                         <div class="d-flex justify-content-end gap-2">
                                             <a class="btn btn-sm btn-label-secondary" href="/administration/hospitals/@hospital.Id">View</a>
                                             <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => OpenEditDialog(hospital)">Edit</button>
+                                            <button type="button" class="btn btn-sm btn-label-danger" title="Delete hospital" @onclick="() => RequestDeleteHospital(hospital)">
+                                                <i class="icon-base ti tabler-trash"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -119,6 +122,27 @@ else
     </div>
 }
 
+@if (_pendingDelete != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(15, 23, 42, 0.45);" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-bottom-0">
+                    <h5 class="modal-title">Delete hospital?</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDeleteHospital" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">This will permanently remove <strong>@_pendingDelete.Name</strong>. You can only delete hospitals that have no linked reports, doctors, users, or registration records.</p>
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-label-secondary" @onclick="CancelDeleteHospital">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteHospitalAsync">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_showDialog)
 {
     <HospitalFormDialog HospitalId="@_editingHospitalId"
@@ -147,6 +171,7 @@ else
     private string _searchTerm = string.Empty;
     private string _statusFilter = "all";
     private int _hospitalPage = 1;
+    private HospitalListItemDto? _pendingDelete;
 
     private List<HospitalListItemDto> FilteredHospitals
     {
@@ -246,6 +271,41 @@ else
         _editingLogoPath = null;
         _editingIsActive = true;
         _showDialog = true;
+    }
+
+    private void RequestDeleteHospital(HospitalListItemDto hospital)
+    {
+        _pendingDelete = hospital;
+    }
+
+    private void CancelDeleteHospital()
+    {
+        _pendingDelete = null;
+    }
+
+    private async Task ConfirmDeleteHospitalAsync()
+    {
+        if (_pendingDelete == null || _currentUser == null)
+            return;
+
+        try
+        {
+            var (ok, message) = await AdministrationService.TryDeleteHospitalAsync(_pendingDelete.Id, _currentUser);
+            if (!ok)
+            {
+                ToastService.ShowToast(message, ToastLevel.Warning);
+                return;
+            }
+
+            ToastService.ShowToast(message, ToastLevel.Success);
+            _pendingDelete = null;
+            await LoadHospitals();
+        }
+        catch (Exception ex)
+        {
+            var inner = ex.InnerException?.Message ?? ex.Message;
+            ToastService.ShowToast($"Error deleting hospital: {inner}", ToastLevel.Error);
+        }
     }
 
     private void OpenEditDialog(HospitalListItemDto hospital)

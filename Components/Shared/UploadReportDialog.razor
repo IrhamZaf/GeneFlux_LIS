@@ -25,10 +25,10 @@
                         <h5 class="text-center mb-2">
                             @(_confirmAction switch
                             {
-                                ConfirmAction.Submit  => "Submit for Review?",
+                                ConfirmAction.Submit  => "Submit Report?",
                                 ConfirmAction.Approve => "Approve this Report?",
                                 ConfirmAction.Reject  => "Reject to Draft?",
-                                _                    => "Save as Draft?"
+                                _                    => "Save Draft Report?"
                             })
                         </h5>
                         <p class="text-muted text-center mb-4">
@@ -55,7 +55,7 @@
                             {
                                 <button type="button" class="btn btn-primary px-4" @onclick="ConfirmSubmitForReview" disabled="@_saving">
                                     @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
-                                    Confirm &amp; Submit
+                                    Confirm &amp; submit report
                                 </button>
                             }
                             else if (_confirmAction == ConfirmAction.Approve)
@@ -76,7 +76,7 @@
                             {
                                 <button type="button" class="btn btn-dark px-4" @onclick="ConfirmSaveDraft" disabled="@_saving">
                                     @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
-                                    Confirm &amp; Save
+                                    Confirm &amp; save draft
                                 </button>
                             }
                         </div>
@@ -227,13 +227,27 @@
                                 </div>
                                 <div class="col-sm-6">
                                     <label class="form-label">Doctor Name</label>
-                                    <select class="form-select" @bind="_doctorId" disabled="@ReadOnly">
+                                    <select class="form-select" @bind="_doctorId" @bind:after="OnDoctorSelectionChangedAsync" disabled="@ReadOnly">
                                         <option value="">Select doctor</option>
                                         @foreach (var d in _doctors)
                                         {
                                             <option value="@d.Id">@d.Name</option>
                                         }
                                     </select>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label">Doctor&apos;s Specialization</label>
+                                    <input class="form-control"
+                                           list="lis-doctor-specialty-options"
+                                           placeholder="Select or type specialization"
+                                           @bind="_doctorSpecialty"
+                                           disabled="@ReadOnly" />
+                                    <datalist id="lis-doctor-specialty-options">
+                                        @foreach (var s in _specialtyOptions)
+                                        {
+                                            <option value="@s"></option>
+                                        }
+                                    </datalist>
                                 </div>
                                 <div class="col-sm-6">
                                     <label class="form-label">Reporting Time &amp; Date</label>
@@ -259,6 +273,13 @@
                                            autocomplete="off"
                                            value="@_nric"
                                            @oninput="OnNricFieldInput"
+                                           disabled="@ReadOnly" />
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label">Patient Passport No.</label>
+                                    <input class="form-control"
+                                           placeholder="Passport number"
+                                           @bind="_passportNo"
                                            disabled="@ReadOnly" />
                                 </div>
                                 <div class="col-sm-4">
@@ -342,10 +363,10 @@
                 {
                     <div class="ms-auto d-inline-flex align-items-center lis-upload-save-submit flex-nowrap">
                         <button type="button" class="btn btn-label-dark" @onclick="RequestSaveDraft">
-                            <i class="icon-base ti tabler-device-floppy me-1"></i>Save Upload Draft
+                            <i class="icon-base ti tabler-device-floppy me-1"></i>Save Draft Report
                         </button>
                         <button type="button" class="btn btn-primary" @onclick="RequestSubmitForReview">
-                            <i class="icon-base ti tabler-send me-1"></i>Submit for Review
+                            <i class="icon-base ti tabler-send me-1"></i>Submit Report
                         </button>
                     </div>
                 }
@@ -389,11 +410,14 @@
     private List<Hospital> _hospitals = new();
     private List<Doctor> _doctors = new();
     private List<Test> _tests = new();
+    private List<string> _specialtyOptions = new();
 
     private int? _hospitalId;
     private int? _doctorId;
+    private string? _doctorSpecialty;
     private string _patientName = string.Empty;
     private string? _nric;
+    private string? _passportNo;
     private string? _mrn;
     private int? _testId;
     private string? _specimenType;
@@ -450,6 +474,7 @@
     {
         _hospitals = await DropdownService.GetHospitalsAsync();
         _tests = await DropdownService.GetTestsAsync();
+        _specialtyOptions = await DropdownService.GetDistinctDoctorSpecialtiesAsync();
 
         if (IsEdit && ExistingReport != null)
         {
@@ -469,9 +494,12 @@
             {
                 _patientName = ExistingReport.Patient.Name;
                 _nric = ExistingReport.Patient.NRIC;
+                _passportNo = ExistingReport.Patient.PassportNo;
                 _mrn = ExistingReport.Patient.MRN;
                 _sex = (int)ExistingReport.Patient.Sex;
             }
+
+            _doctorSpecialty = ExistingReport.Doctor?.Specialty;
 
             _doctors = await DropdownService.GetDoctorsForHospitalDropdownAsync(
                 ExistingReport.HospitalId,
@@ -498,6 +526,18 @@
         {
             _doctors = await DropdownService.GetDoctorsAsync();
         }
+    }
+
+    private Task OnDoctorSelectionChangedAsync()
+    {
+        if (_doctorId.HasValue)
+        {
+            var d = _doctors.FirstOrDefault(x => x.Id == _doctorId.Value);
+            if (d != null && !string.IsNullOrWhiteSpace(d.Specialty))
+                _doctorSpecialty = d.Specialty;
+        }
+
+        return Task.CompletedTask;
     }
 
     private Task OnFileSelected(InputFileChangeEventArgs args)
@@ -538,7 +578,10 @@
         _hospitalId = data.HospitalId ?? _hospitalId;
         _doctorId = data.DoctorId ?? _doctorId;
         _patientName = data.PatientName ?? _patientName;
-        _nric = data.NricOrPassport ?? _nric;
+        if (data.IdentityType == IdentityType.Passport)
+            _passportNo = data.NricOrPassport ?? _passportNo;
+        else
+            _nric = data.NricOrPassport ?? _nric;
         _mrn = data.Mrn ?? _mrn;
         _sex = (int)data.Sex;
         _testId = data.TestId ?? _testId;
@@ -625,12 +668,13 @@
         _saving = true;
         try
         {
+            var usePassport = !string.IsNullOrWhiteSpace(_passportNo);
             var demo = new Patient
             {
                 Name = _patientName.Trim(),
-                IdentityType = IdentityType.NRIC,
-                NRIC = _nric?.Trim(),
-                PassportNo = null,
+                IdentityType = usePassport ? IdentityType.Passport : IdentityType.NRIC,
+                NRIC = usePassport ? null : _nric?.Trim(),
+                PassportNo = usePassport ? _passportNo?.Trim() : null,
                 MRN = string.IsNullOrWhiteSpace(_mrn) ? null : _mrn.Trim(),
                 Sex = (Sex)_sex
             };
@@ -680,14 +724,24 @@
                 savedReport = await ReportService.CreateAsync(report, new List<TestResult>(), CurrentUser);
             }
 
+            if (_doctorId.HasValue && !string.IsNullOrWhiteSpace(_doctorSpecialty))
+            {
+                var doc = await DropdownService.GetDoctorByIdAsync(_doctorId.Value);
+                if (doc != null)
+                {
+                    doc.Specialty = _doctorSpecialty.Trim();
+                    await DropdownService.UpdateDoctorAsync(doc, CurrentUser);
+                }
+            }
+
             if (submitForReview)
             {
                 await ReportService.SubmitForReviewAsync(savedReport.Id, CurrentUser);
-                ToastService.ShowToast("Uploaded report submitted for review.", ToastLevel.Success);
+                ToastService.ShowToast("Report submitted.", ToastLevel.Success);
             }
             else
             {
-                ToastService.ShowToast("Uploaded report draft saved.", ToastLevel.Success);
+                ToastService.ShowToast("Draft report saved.", ToastLevel.Success);
             }
 
             await OnClose.InvokeAsync(true);

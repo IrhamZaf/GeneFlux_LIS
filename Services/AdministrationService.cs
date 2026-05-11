@@ -332,6 +332,43 @@ public class AdministrationService
         return true;
     }
 
+    /// <summary>Deletes a hospital only when nothing references it (reports, doctors, users, registrations).</summary>
+    public async Task<(bool Success, string Message)> TryDeleteHospitalAsync(int hospitalId, ApplicationUser actor, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var hospital = await context.Hospitals.FirstOrDefaultAsync(h => h.Id == hospitalId, cancellationToken);
+        if (hospital == null)
+            return (false, "Hospital not found.");
+
+        var reportCount = await context.Reports.CountAsync(r => r.HospitalId == hospitalId, cancellationToken);
+        if (reportCount > 0)
+            return (false, $"Cannot delete this hospital: {reportCount} report(s) are linked to it.");
+
+        var doctorCount = await context.Doctors.CountAsync(d => d.HospitalId == hospitalId, cancellationToken);
+        if (doctorCount > 0)
+            return (false, $"Cannot delete this hospital: {doctorCount} doctor profile(s) belong to it.");
+
+        var assignmentCount = await context.UserHospitals.CountAsync(uh => uh.HospitalId == hospitalId, cancellationToken);
+        if (assignmentCount > 0)
+            return (false, "Cannot delete this hospital: users are still assigned to it.");
+
+        var defaultHospitalUsers = await context.Users.CountAsync(u => u.HospitalId == hospitalId, cancellationToken);
+        if (defaultHospitalUsers > 0)
+            return (false, "Cannot delete this hospital: user accounts still reference it as their default hospital.");
+
+        var registrationRefs = await context.StaffRegistrationRequests.CountAsync(r => r.HospitalId == hospitalId, cancellationToken);
+        if (registrationRefs > 0)
+            return (false, "Cannot delete this hospital: staff registration records reference it.");
+
+        var before = new { hospital.Name, hospital.Address, hospital.IsActive };
+        context.Hospitals.Remove(hospital);
+        await context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.WriteAsync("HospitalDeleted", "Hospital", hospitalId.ToString(), actor, before, metadata: new { hospital.Name });
+        return (true, "Hospital deleted.");
+    }
+
     private sealed record ReportMatchRow(int DoctorId, string? DoctorUserId, string? DoctorEmail, string CreatedByUserId);
 
     private static int CountReportsForAssignedUser(IReadOnlyList<ReportMatchRow> rows, ApplicationUser u)

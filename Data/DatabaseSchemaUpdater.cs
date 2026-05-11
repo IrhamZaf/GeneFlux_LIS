@@ -54,6 +54,12 @@ public static class DatabaseSchemaUpdater
                 await AddColumnIfMissingAsync(connection, "StaffRegistrationRequests", "MmcNumber", "nvarchar(50) NULL");
             }
 
+            if (await TableExistsAsync(connection, "AspNetUsers"))
+            {
+                await AddColumnIfMissingAsync(connection, "AspNetUsers", "MobileNumber", "nvarchar(50) NULL");
+                await AddColumnIfMissingAsync(connection, "AspNetUsers", "OfficeNumber", "nvarchar(50) NULL");
+            }
+
             if (await TableExistsAsync(connection, "Doctors"))
                 await EnsureUniqueDoctorEmailIndexAsync(connection);
         }

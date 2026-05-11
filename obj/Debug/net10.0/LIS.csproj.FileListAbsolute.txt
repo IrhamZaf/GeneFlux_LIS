@@ -23,7 +23,6 @@ C:\Dev\LIS\bin\Debug\net10.0\LatoFont\Lato-SemiBoldItalic.ttf
 C:\Dev\LIS\bin\Debug\net10.0\LatoFont\Lato-Thin.ttf
 C:\Dev\LIS\bin\Debug\net10.0\LatoFont\Lato-ThinItalic.ttf
 C:\Dev\LIS\bin\Debug\net10.0\LatoFont\OFL.txt
-C:\Dev\LIS\bin\Debug\net10.0\LIS.exe
 C:\Dev\LIS\bin\Debug\net10.0\LIS.deps.json
 C:\Dev\LIS\bin\Debug\net10.0\LIS.runtimeconfig.json
 C:\Dev\LIS\bin\Debug\net10.0\LIS.dll
@@ -3479,3 +3478,4 @@ c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\libwinpthread-1.dll
 c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\qpdf.dll
 c:\Dev\LIS\obj\agent-test-modal\runtimes\win-x86\native\zlib1.dll
 C:\Dev\LIS\obj\Debug\net10.0\LIS.sourcelink.json
+c:\Dev\LIS\bin\Debug\net10.0\LIS.exe

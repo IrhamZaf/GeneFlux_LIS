@@ -75,7 +75,7 @@ public class CurrentUserService
 
     public bool HasHospitalAccess(ApplicationUser user, int hospitalId)
     {
-        if (user.Role == UserRole.SuperAdmin)
+        if (user.Role is UserRole.SuperAdmin or UserRole.LabAdmin)
             return true;
 
         return GetAccessibleHospitalIds(user).Contains(hospitalId);

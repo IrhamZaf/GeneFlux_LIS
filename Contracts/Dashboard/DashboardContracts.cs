@@ -44,9 +44,15 @@ public class DashboardStatsDto
     public int TotalHospitals { get; set; }
     public int TotalUsers { get; set; }
     public int TotalPatients { get; set; }
+    /// <summary>All reports in scope (draft + submitted pipeline).</summary>
     public int TotalReports { get; set; }
+    /// <summary>Non-draft reports (PendingReview, Approved, Archived).</summary>
+    public int TotalSubmittedReports { get; set; }
+    /// <summary>Draft reports only.</summary>
     public int PendingReports { get; set; }
     public int CompletedReports { get; set; }
+    /// <summary>Distinct doctors appearing on scoped reports.</summary>
+    public int TotalDoctors { get; set; }
 }
 
 public class DashboardRecentReportDto

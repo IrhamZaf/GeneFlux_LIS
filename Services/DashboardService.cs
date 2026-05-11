@@ -22,16 +22,48 @@ public class DashboardService
         var scopedReports = BuildScopedReportQuery(context, user, hospitalId);
         var scope = await BuildScopeAsync(context, user, hospitalId, cancellationToken);
 
+        // Doctor / Head Nurse / Lab Manager: Pending = Draft + PendingReview; Completed = Approved + Archived (aligned with Reports tabs).
+        // Lab admin roles: Pending = Draft only; TotalSubmittedReports = all non-draft statuses.
+        int pendingReportsStat;
+        int totalSubmittedStat;
+        int totalReportsCount;
+        int completedApprovedArchived;
+
+        if (user.Role is UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager)
+        {
+            pendingReportsStat = await scopedReports.CountAsync(
+                r => r.Status == ReportStatus.Draft || r.Status == ReportStatus.PendingReview,
+                cancellationToken);
+            completedApprovedArchived = await scopedReports.CountAsync(
+                r => r.Status == ReportStatus.Approved || r.Status == ReportStatus.Archived,
+                cancellationToken);
+            totalSubmittedStat = completedApprovedArchived;
+            totalReportsCount = pendingReportsStat + completedApprovedArchived;
+        }
+        else
+        {
+            var draftCount = await scopedReports.CountAsync(r => r.Status == ReportStatus.Draft, cancellationToken);
+            var submittedPipelineCount = await scopedReports.CountAsync(r => r.Status != ReportStatus.Draft, cancellationToken);
+            pendingReportsStat = draftCount;
+            totalSubmittedStat = submittedPipelineCount;
+            totalReportsCount = draftCount + submittedPipelineCount;
+            completedApprovedArchived = await scopedReports.CountAsync(
+                r => r.Status == ReportStatus.Approved || r.Status == ReportStatus.Archived,
+                cancellationToken);
+        }
+
         var stats = new DashboardStatsDto
         {
-            TotalHospitals = user.Role == UserRole.SuperAdmin
+            TotalHospitals = user.Role is UserRole.SuperAdmin or UserRole.LabAdmin
                 ? await context.Hospitals.CountAsync(h => h.IsActive, cancellationToken)
                 : scope.Hospitals.Count,
             TotalUsers = await GetUserCountAsync(context, user, hospitalId, cancellationToken),
             TotalPatients = await scopedReports.Select(r => r.PatientId).Distinct().CountAsync(cancellationToken),
-            TotalReports = await scopedReports.CountAsync(cancellationToken),
-            PendingReports = await scopedReports.CountAsync(r => r.Status == ReportStatus.PendingReview, cancellationToken),
-            CompletedReports = await scopedReports.CountAsync(r => r.Status == ReportStatus.Approved || r.Status == ReportStatus.Archived, cancellationToken)
+            TotalReports = totalReportsCount,
+            TotalSubmittedReports = totalSubmittedStat,
+            PendingReports = pendingReportsStat,
+            CompletedReports = completedApprovedArchived,
+            TotalDoctors = await scopedReports.Select(r => r.DoctorId).Distinct().CountAsync(cancellationToken)
         };
 
         var recentReports = await scopedReports
@@ -176,26 +208,27 @@ public class DashboardService
         var query = context.Reports.AsQueryable();
         var accessibleHospitalIds = _currentUserService.GetAccessibleHospitalIds(user);
 
-        if (user.Role != UserRole.SuperAdmin)
+        // Geneflux Lab Admin: same global visibility as Super Admin for operational reporting.
+        if (user.Role is UserRole.SuperAdmin or UserRole.LabAdmin)
         {
-            if (accessibleHospitalIds.Count > 0)
-                query = query.Where(r => accessibleHospitalIds.Contains(r.HospitalId));
-
-            if (user.Role == UserRole.Doctor)
-            {
-                query = query.Where(r =>
-                    (user.DoctorId.HasValue && r.DoctorId == user.DoctorId.Value) ||
-                    (!string.IsNullOrWhiteSpace(user.Email) && r.Doctor.Email != null && r.Doctor.Email == user.Email) ||
-                    r.CreatedByUserId == user.Id);
-                query = query.Where(r => r.Status == ReportStatus.Approved);
-            }
-        }
-        else if (hospitalId.HasValue)
-        {
-            query = query.Where(r => r.HospitalId == hospitalId.Value);
+            if (hospitalId.HasValue)
+                query = query.Where(r => r.HospitalId == hospitalId.Value);
+            return query;
         }
 
-        if (user.Role != UserRole.SuperAdmin && hospitalId.HasValue)
+        if (accessibleHospitalIds.Count > 0)
+            query = query.Where(r => accessibleHospitalIds.Contains(r.HospitalId));
+
+        if (user.Role == UserRole.Doctor)
+        {
+            // All statuses for attributed reports (dashboard + doctor reports UI); not Approved-only.
+            query = query.Where(r =>
+                (user.DoctorId.HasValue && r.DoctorId == user.DoctorId.Value) ||
+                (!string.IsNullOrWhiteSpace(user.Email) && r.Doctor.Email != null && r.Doctor.Email == user.Email) ||
+                r.CreatedByUserId == user.Id);
+        }
+
+        if (hospitalId.HasValue)
         {
             if (accessibleHospitalIds.Contains(hospitalId.Value))
                 query = query.Where(r => r.HospitalId == hospitalId.Value);
@@ -208,7 +241,7 @@ public class DashboardService
 
     private async Task<DashboardScopeDto> BuildScopeAsync(ApplicationDbContext context, ApplicationUser user, int? requestedHospitalId, CancellationToken cancellationToken)
     {
-        var hospitals = user.Role == UserRole.SuperAdmin
+        var hospitals = user.Role is UserRole.SuperAdmin or UserRole.LabAdmin
             ? await context.Hospitals
                 .Where(h => h.IsActive)
                 .OrderBy(h => h.Name)
@@ -226,7 +259,7 @@ public class DashboardService
                 })
                 .ToList();
 
-        var selectedHospitalId = user.Role == UserRole.SuperAdmin
+        var selectedHospitalId = user.Role is UserRole.SuperAdmin or UserRole.LabAdmin
             ? requestedHospitalId
             : _currentUserService.GetDefaultHospitalId(user);
 
@@ -244,16 +277,16 @@ public class DashboardService
         return user.Role switch
         {
             UserRole.Doctor => "Personal dashboard",
-            UserRole.HeadNurse or UserRole.LabManager or UserRole.LabAdmin when hospitalCount > 1 => "Assigned hospitals",
-            UserRole.HeadNurse or UserRole.LabManager or UserRole.LabAdmin => "Scoped operational overview",
-            UserRole.SuperAdmin => "System-wide overview",
+            UserRole.HeadNurse or UserRole.LabManager when hospitalCount > 1 => "Assigned hospitals",
+            UserRole.HeadNurse or UserRole.LabManager => "Scoped operational overview",
+            UserRole.SuperAdmin or UserRole.LabAdmin => "System-wide overview",
             _ => "System overview"
         };
     }
 
     private async Task<int> GetUserCountAsync(ApplicationDbContext context, ApplicationUser user, int? hospitalId, CancellationToken cancellationToken)
     {
-        if (user.Role == UserRole.SuperAdmin)
+        if (user.Role is UserRole.SuperAdmin or UserRole.LabAdmin)
         {
             if (!hospitalId.HasValue)
                 return await context.Users.CountAsync(u => u.IsActive, cancellationToken);

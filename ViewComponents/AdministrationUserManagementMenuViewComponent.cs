@@ -14,10 +14,9 @@ public class AdministrationUserManagementMenuViewComponent : ViewComponent
 
     public async Task<IViewComponentResult> InvokeAsync()
     {
-        // "Admin" is the extra Identity role used with LabAdmin in some accounts (see user seed).
-        var showUsers = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
-        var showStaff = User.IsInRole("SuperAdmin") || User.IsInRole("LabAdmin");
-        var showHospitals = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+        var showUsers = User.IsInRole("SuperAdmin") || User.IsInRole("LabAdmin") || User.IsInRole("Admin");
+        var showStaff = User.IsInRole("SuperAdmin") || User.IsInRole("LabAdmin") || User.IsInRole("Admin");
+        var showHospitals = User.IsInRole("SuperAdmin") || User.IsInRole("LabAdmin") || User.IsInRole("Admin");
 
         if (!showUsers && !showStaff && !showHospitals)
             return Content(string.Empty);
@@ -28,7 +27,8 @@ public class AdministrationUserManagementMenuViewComponent : ViewComponent
         var staffActive = path.Contains("registration-requests", StringComparison.OrdinalIgnoreCase);
         var usersActive = path.Contains("/Administration/Users", StringComparison.OrdinalIgnoreCase)
                           || path.Contains("/administration/users", StringComparison.OrdinalIgnoreCase);
-        var userMgmtOpen = staffActive || usersActive;
+        var activityLogActive = path.Contains("activity-log", StringComparison.OrdinalIgnoreCase);
+        var userMgmtOpen = staffActive || usersActive || activityLogActive;
 
         var vm = new AdministrationUserManagementMenuViewModel
         {
@@ -36,10 +36,12 @@ public class AdministrationUserManagementMenuViewComponent : ViewComponent
             ShowUserManagementSection = showUsers || showStaff,
             ShowUsersChild = showUsers,
             ShowStaffRegistrationsChild = showStaff,
+            ShowActivityLogChild = showUsers,
             PendingRegistrationCount = pending,
             UserManagementMenuOpen = userMgmtOpen,
             UsersActive = usersActive,
-            StaffRegistrationsActive = staffActive
+            StaffRegistrationsActive = staffActive,
+            ActivityLogActive = activityLogActive
         };
 
         return View(vm);
@@ -56,4 +58,6 @@ public class AdministrationUserManagementMenuViewModel
     public bool UserManagementMenuOpen { get; set; }
     public bool UsersActive { get; set; }
     public bool StaffRegistrationsActive { get; set; }
+    public bool ShowActivityLogChild { get; set; }
+    public bool ActivityLogActive { get; set; }
 }

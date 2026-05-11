@@ -51,6 +51,25 @@
                                 <input type="password" class="form-control" @bind="_password" />
                             </div>
                         }
+                        @if (_role == UserRole.Doctor)
+                        {
+                            <div class="col-12">
+                                <label class="form-label">Specialization</label>
+                                <input class="form-control" @bind="_doctorSpecialty" placeholder="Medical specialization" />
+                                <div class="form-text">Synced to the linked doctor profile.</div>
+                            </div>
+                        }
+                        @if (_role is UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager)
+                        {
+                            <div class="col-md-6">
+                                <label class="form-label">Mobile No.</label>
+                                <input class="form-control" @bind="_mobileNumber" inputmode="tel" autocomplete="tel" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Office No.</label>
+                                <input class="form-control" @bind="_officeNumber" inputmode="tel" autocomplete="tel" />
+                            </div>
+                        }
                         <div class="col-12">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="user-active-toggle" @bind="_isActive" />
@@ -64,7 +83,7 @@
                     <div class="mb-3">
                         <label class="form-label d-block">Role</label>
                         <div class="row g-2">
-                            @foreach (var role in _availableRoles)
+                            @foreach (var role in RolesForPicker)
                             {
                                 <div class="col-md-6">
                                     <button type="button"
@@ -94,7 +113,7 @@
                                     <option value="@h.Id">@h.Name</option>
                                 }
                             </select>
-                            <div class="form-text">This role is scoped to a hospital assignment.</div>
+                            <div class="form-text">Required for this role.</div>
                         </div>
                     }
                 }
@@ -112,26 +131,42 @@
     [Parameter] public UserRole? Role { get; set; }
     [Parameter] public ApplicationUser? ExistingUser { get; set; }
     [Parameter] public List<Hospital> Hospitals { get; set; } = new();
+    /// <summary>When false (e.g. Lab Admin actor), Super Admin is never offered in the role picker—even when editing.</summary>
+    [Parameter] public bool AllowSuperAdminRolePicker { get; set; } = true;
 
     private bool IsEdit => ExistingUser != null;
     private readonly UserRole[] _availableRoles =
     [
-        UserRole.SuperAdmin,
         UserRole.LabAdmin,
         UserRole.Doctor,
         UserRole.HeadNurse,
         UserRole.LabManager
     ];
 
+    private UserRole[] RolesForPicker =>
+        AllowSuperAdminRolePicker && IsEdit && ExistingUser?.Role == UserRole.SuperAdmin
+            ?
+            [
+                UserRole.SuperAdmin,
+                UserRole.LabAdmin,
+                UserRole.Doctor,
+                UserRole.HeadNurse,
+                UserRole.LabManager
+            ]
+            : _availableRoles;
+
     private string _fullName = string.Empty;
     private string _email = string.Empty;
     private string _password = string.Empty;
+    private string _mobileNumber = string.Empty;
+    private string _officeNumber = string.Empty;
+    private string _doctorSpecialty = string.Empty;
     private int? _hospitalId;
     private UserRole _role = UserRole.LabAdmin;
     private bool _isActive = true;
     private string _activeTab = "details";
 
-    protected override void OnInitialized()
+    protected override Task OnParametersSetAsync()
     {
         if (ExistingUser != null)
         {
@@ -140,11 +175,25 @@
             _hospitalId = ExistingUser.HospitalId;
             _role = ExistingUser.Role;
             _isActive = ExistingUser.IsActive;
+            _mobileNumber = ExistingUser.MobileNumber ?? string.Empty;
+            _officeNumber = ExistingUser.OfficeNumber ?? string.Empty;
+            _doctorSpecialty = ExistingUser.Doctor?.Specialty ?? string.Empty;
         }
-        else if (Role.HasValue)
+        else
         {
-            _role = Role.Value;
+            _fullName = string.Empty;
+            _email = string.Empty;
+            _password = string.Empty;
+            _mobileNumber = string.Empty;
+            _officeNumber = string.Empty;
+            _doctorSpecialty = string.Empty;
+            _hospitalId = null;
+            _isActive = true;
+            _role = Role ?? UserRole.LabAdmin;
+            _activeTab = "details";
         }
+
+        return Task.CompletedTask;
     }
 
     private async Task Cancel() => await OnClose.InvokeAsync(false);
@@ -181,6 +230,8 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var actor = await CurrentUserService.GetCurrentUserAsync(authState.User);
 
+        var doctorSpec = _role == UserRole.Doctor ? _doctorSpecialty : null;
+
         if (IsEdit && ExistingUser != null)
         {
             ExistingUser.FullName = _fullName;
@@ -188,8 +239,10 @@
             ExistingUser.Role = _role;
             ExistingUser.HospitalId = RequiresHospital(_role) ? _hospitalId : null;
             ExistingUser.IsActive = _isActive;
+            ExistingUser.MobileNumber = string.IsNullOrWhiteSpace(_mobileNumber) ? null : _mobileNumber.Trim();
+            ExistingUser.OfficeNumber = string.IsNullOrWhiteSpace(_officeNumber) ? null : _officeNumber.Trim();
 
-            var (success, errors) = await UserService.UpdateUserAsync(ExistingUser, actor);
+            var (success, errors) = await UserService.UpdateUserAsync(ExistingUser, actor, doctorSpec);
             if (!success)
             {
                 foreach (var e in errors)
@@ -205,10 +258,12 @@
                 Email = _email,
                 Role = _role,
                 HospitalId = RequiresHospital(_role) ? _hospitalId : null,
-                IsActive = _isActive
+                IsActive = _isActive,
+                MobileNumber = string.IsNullOrWhiteSpace(_mobileNumber) ? null : _mobileNumber.Trim(),
+                OfficeNumber = string.IsNullOrWhiteSpace(_officeNumber) ? null : _officeNumber.Trim()
             };
 
-            var (success, errors) = await UserService.CreateUserAsync(user, _password, actor);
+            var (success, errors) = await UserService.CreateUserAsync(user, _password, actor, doctorSpec);
             if (!success)
             {
                 foreach (var e in errors)

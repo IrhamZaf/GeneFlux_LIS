@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace LIS.Pages.Administration;
 
-[Authorize(Roles = "SuperAdmin,LabAdmin")]
+[Authorize(Roles = "SuperAdmin,LabAdmin,Admin")]
 public class RegistrationRequestsModel : PageModel
 {
     private readonly StaffRegistrationService _registrationService;

@@ -8,7 +8,7 @@ public class RoleAccessService
 
     public bool CanEditDraftReports(UserRole role) => role is UserRole.SuperAdmin or UserRole.LabAdmin;
 
-    public bool CanDeleteDraftReports(UserRole role) => role == UserRole.SuperAdmin;
+    public bool CanDeleteDraftReports(UserRole role) => role is UserRole.SuperAdmin or UserRole.LabAdmin;
 
     public bool CanSubmitReports(UserRole role) => role is UserRole.SuperAdmin or UserRole.LabAdmin;
 
@@ -21,6 +21,9 @@ public class RoleAccessService
     public bool CanDownloadReports(UserRole role) => role is UserRole.SuperAdmin or UserRole.LabAdmin or UserRole.HeadNurse or UserRole.LabManager or UserRole.Doctor;
 
     public bool CanManageSettings(UserRole role) => role == UserRole.SuperAdmin;
+
+    /// <summary>Hospitals, user accounts, registrations, and activity log — same for Super Admin and Lab Admin. System Settings remain Super Admin only (<see cref="CanManageSettings"/>).</summary>
+    public bool CanAccessAdministration(UserRole role) => role is UserRole.SuperAdmin or UserRole.LabAdmin;
 
     public bool CanAccessReports(UserRole role) => role is UserRole.SuperAdmin or UserRole.LabAdmin or UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager;
 
@@ -40,11 +43,21 @@ public class RoleAccessService
 
     public bool IsReadOnlyRole(UserRole role) => role is UserRole.HeadNurse or UserRole.LabManager;
 
+    /// <summary>Role-specific home landing (analytics hero + scoped dashboard).</summary>
+    public string GetLandingHref(UserRole role) => role switch
+    {
+        UserRole.SuperAdmin => "/home/geneflux-super-admin",
+        UserRole.LabAdmin => "/home/geneflux-lab-admin",
+        UserRole.Doctor => "/home/clinical-doctor",
+        UserRole.HeadNurse or UserRole.LabManager => "/home/hospital-reporting",
+        _ => "/home/clinical-doctor"
+    };
+
     public string GetPrimaryWorkspaceHref(UserRole role) => role switch
     {
         UserRole.SuperAdmin or UserRole.LabAdmin => "/reports",
         UserRole.Doctor or UserRole.HeadNurse or UserRole.LabManager => "/reports",
-        _ => "/"
+        _ => GetLandingHref(role)
     };
 
     public string GetPrimaryWorkspaceLabel(UserRole role) => role switch
@@ -59,7 +72,12 @@ public class RoleAccessService
         return NormalizeWorkflow(workflow) switch
         {
             "reports" => "This report workspace is not available for your role.",
-            "administration" or "settings" => "Administration is reserved for SuperAdmin users.",
+            "administration" => CanAccessAdministration(role)
+                ? "This view is not available from this navigation path."
+                : "Hospital and user administration is reserved for Super Admin and Lab Admin users.",
+            "settings" => CanManageSettings(role)
+                ? "This view is not available from this navigation path."
+                : "System settings (roles, organization, configuration) are reserved for Super Admin users.",
             _ => "This workflow is not available for your role."
         };
     }
@@ -67,7 +85,7 @@ public class RoleAccessService
     public string GetRoleSummary(UserRole role) => role switch
     {
         UserRole.SuperAdmin => "System-wide access to dashboard, reports, hospitals, users, and administration.",
-        UserRole.LabAdmin => "Full operational access to reports and workflow transitions.",
+        UserRole.LabAdmin => "Same scope as Super Admin for dashboard, reports, and administration (hospitals, user accounts, requests, activity log). System Settings and dropdown master data are Super Admin only.",
         UserRole.Doctor => "View and download approved reports attributed to you.",
         UserRole.HeadNurse => "Read-only access to all hospital reports.",
         UserRole.LabManager => "Read-only access to all hospital reports.",
@@ -98,7 +116,7 @@ public class RoleAccessService
     {
         var items = new List<RoleFlowItem>
         {
-            new("Dashboard", "Overview of operational activity and report workload.", "/", "icon-base ti tabler-dashboard", GetRoleThemeClass(role)),
+            new("Dashboard", "Overview of operational activity and report workload.", GetLandingHref(role), "icon-base ti tabler-dashboard", GetRoleThemeClass(role)),
             new("Reports", "Unified report workspace with status-based actions and search.", "/reports", "icon-base ti tabler-file-report", "bg-label-success")
         };
 
@@ -113,7 +131,7 @@ public class RoleAccessService
     {
         var list = new List<AdministrationMenuEntry>();
 
-        if (role == UserRole.SuperAdmin)
+        if (CanAccessAdministration(role))
         {
             list.Add(new AdministrationMenuLink(
                 "Hospitals",
@@ -124,26 +142,30 @@ public class RoleAccessService
         }
 
         var userMgmtChildren = new List<AdministrationMenuChildLink>();
-        if (role == UserRole.SuperAdmin)
+        if (CanAccessAdministration(role))
         {
             userMgmtChildren.Add(new AdministrationMenuChildLink(
-                "Users",
+                "User Accounts",
                 "Create users, assign roles, and manage hospital access.",
                 "/administration/users",
                 "icon-base ti tabler-users",
                 "bg-label-secondary"));
-        }
 
-        if (role is UserRole.SuperAdmin or UserRole.LabAdmin)
-        {
             var staffBadge = pendingStaffRegistrations > 0 ? pendingStaffRegistrations : (int?)null;
             userMgmtChildren.Add(new AdministrationMenuChildLink(
-                "Staff registrations",
+                "Pending Request",
                 "Approve self-service sign-ups from doctors, head nurses, and lab managers.",
                 "/administration/registration-requests",
                 "icon-base ti tabler-user-plus",
                 "bg-label-warning",
                 staffBadge));
+
+            userMgmtChildren.Add(new AdministrationMenuChildLink(
+                "System Activity Log",
+                "Review audit history for administrative actions.",
+                "/administration/activity-log",
+                "icon-base ti tabler-history",
+                "bg-label-secondary"));
         }
 
         if (userMgmtChildren.Count > 0)

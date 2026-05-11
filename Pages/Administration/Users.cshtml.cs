@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LIS.Pages.Administration
 {
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "SuperAdmin,LabAdmin,Admin")]
     public class UsersModel : PageModel
     {
         private readonly UserManager<ApplicationUser> _userManager;

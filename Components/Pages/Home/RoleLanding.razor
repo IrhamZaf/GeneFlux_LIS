@@ -1,0 +1,129 @@
+@page "/home/geneflux-super-admin"
+@page "/home/geneflux-lab-admin"
+@page "/home/clinical-doctor"
+@page "/home/hospital-reporting"
+@attribute [Authorize]
+@inject AuthenticationStateProvider AuthStateProvider
+@inject CurrentUserService CurrentUserService
+@inject RoleAccessService RoleAccess
+@inject NavigationManager Navigation
+@using LIS.Models
+
+<PageTitle>@_pageTitle - Geneflux LIS</PageTitle>
+
+@if (!_redirectChecked)
+{
+    <div class="d-flex justify-content-center my-4">
+        <div class="spinner-border text-success" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <DashboardHomeContent HeroTitle="@_heroTitle"
+                        HeroSubtitle="@_heroSubtitle"
+                        ScopeHospitalId="@_scopeHospitalId"
+                        QuickLinks="@_quickLinks" />
+}
+
+@code {
+    private bool _redirectChecked;
+    private string _pageTitle = "Dashboard";
+    private string _heroTitle = "";
+    private string _heroSubtitle = "";
+    private int? _scopeHospitalId;
+    private IReadOnlyList<(string Label, string Href)>? _quickLinks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated != true)
+        {
+            _redirectChecked = true;
+            return;
+        }
+
+        var user = await CurrentUserService.GetCurrentUserAsync(authState.User);
+        if (user == null)
+        {
+            _redirectChecked = true;
+            return;
+        }
+
+        var canonical = RoleAccess.GetLandingHref(user.Role);
+        var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/');
+        if (!path.Equals(canonical, StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(canonical);
+            return;
+        }
+
+        ApplyLandingCopy(user);
+        _redirectChecked = true;
+    }
+
+    private void ApplyLandingCopy(ApplicationUser user)
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/');
+
+        switch (user.Role)
+        {
+            case UserRole.SuperAdmin when relative.StartsWith("home/geneflux-super-admin", StringComparison.OrdinalIgnoreCase):
+                _pageTitle = "Super Admin overview";
+                // No hero card: analytics KPIs and charts are the primary focus; use sidebar for admin destinations.
+                _heroTitle = "";
+                _heroSubtitle = "";
+                _scopeHospitalId = null;
+                _quickLinks = null;
+                break;
+
+            case UserRole.LabAdmin when relative.StartsWith("home/geneflux-lab-admin", StringComparison.OrdinalIgnoreCase):
+                _pageTitle = "Lab Admin workspace";
+                _heroTitle = "Geneflux Lab Admin";
+                _heroSubtitle = "Same operational scope as Super Admin—system-wide dashboard and reports, hospitals, user accounts, and pending requests. System Settings (roles, configuration, dropdown master data) are Super Admin only.";
+                _scopeHospitalId = null;
+                _quickLinks =
+                [
+                    ("Open reports (all)", "/reports"),
+                    ("Hospitals", "/administration/hospitals"),
+                    ("User Accounts", "/administration/users"),
+                    ("Pending Request", "/administration/registration-requests")
+                ];
+                break;
+
+            case UserRole.Doctor when relative.StartsWith("home/clinical-doctor", StringComparison.OrdinalIgnoreCase):
+                _pageTitle = "Clinical dashboard";
+                _heroTitle = "Hospital / clinic doctor";
+                _heroSubtitle = "View approved reports for your patients only. Use Patient Directory to search by identity or MRN.";
+                _scopeHospitalId = CurrentUserService.GetDefaultHospitalId(user);
+                _quickLinks =
+                [
+                    ("My reports", "/reports"),
+                    ("Patients", "/patients")
+                ];
+                break;
+
+            case UserRole.HeadNurse when relative.StartsWith("home/hospital-reporting", StringComparison.OrdinalIgnoreCase):
+            case UserRole.LabManager when relative.StartsWith("home/hospital-reporting", StringComparison.OrdinalIgnoreCase):
+                _pageTitle = "Hospital reporting";
+                _heroTitle = "Reporting dashboard";
+                _heroSubtitle = "Read-only visibility of approved reports for all doctors within your hospital.";
+                _scopeHospitalId = CurrentUserService.GetDefaultHospitalId(user);
+                _quickLinks =
+                [
+                    ("Hospital reports", "/reports"),
+                    ("Patient directory", "/patients")
+                ];
+                break;
+
+            default:
+                _pageTitle = "Dashboard";
+                _heroTitle = RoleAccess.GetRoleDisplayName(user.Role);
+                _heroSubtitle = RoleAccess.GetRoleSummary(user.Role);
+                _scopeHospitalId = CurrentUserService.GetDefaultHospitalId(user);
+                _quickLinks = [("Reports", "/reports")];
+                break;
+        }
+    }
+}

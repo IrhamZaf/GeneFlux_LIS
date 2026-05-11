@@ -66,20 +66,41 @@ else
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="text-uppercase small">Patient</th>
-                        <th class="text-uppercase small">Identity</th>
-                        <th class="text-uppercase small">MRN</th>
-                        <th class="text-uppercase small">Hospital</th>
-                        <th class="text-uppercase small">Doctor</th>
-                        <th class="text-uppercase small">Status</th>
-                        <th class="text-uppercase small text-end">Action</th>
+                        @if (_isDoctor)
+                        {
+                            <th class="text-uppercase small">Patient Name</th>
+                            <th class="text-uppercase small">MRN No.</th>
+                            <th class="text-uppercase small">NRIC</th>
+                            <th class="text-uppercase small">Passport No.</th>
+                            <th class="text-uppercase small text-end">Action</th>
+                        }
+                        else if (_isHospitalStaffDirectory)
+                        {
+                            <th class="text-uppercase small">Patient Name</th>
+                            <th class="text-uppercase small">MRN No.</th>
+                            <th class="text-uppercase small">NRIC</th>
+                            <th class="text-uppercase small">Passport No.</th>
+                            <th class="text-uppercase small">Doctor Name</th>
+                            <th class="text-uppercase small">Doctor&apos;s Specialization</th>
+                            <th class="text-uppercase small text-end">Action</th>
+                        }
+                        else
+                        {
+                            <th class="text-uppercase small">Patient</th>
+                            <th class="text-uppercase small">Identity</th>
+                            <th class="text-uppercase small">MRN</th>
+                            <th class="text-uppercase small">Hospital</th>
+                            <th class="text-uppercase small">Doctor</th>
+                            <th class="text-uppercase small">Status</th>
+                            <th class="text-uppercase small text-end">Action</th>
+                        }
                     </tr>
                 </thead>
                 <tbody>
                     @if (FilteredPatients.Count == 0)
                     {
                         <tr>
-                            <td colspan="7" class="text-center py-4">
+                            <td colspan="@(_isDoctor ? 5 : 7)" class="text-center py-4">
                                 <div class="empty-state-panel py-4">
                                     <h6 class="mb-1">No patient records found</h6>
                                     <p class="text-muted mb-0">Adjust the search terms or wait for completed reports to be submitted.</p>
@@ -92,28 +113,71 @@ else
                         @foreach (var item in FilteredPatients)
                         {
                             <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar avatar-sm me-3">
-                                            <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(item.PatientName)</span>
+                                @if (_isDoctor)
+                                {
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar avatar-sm me-3">
+                                                <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(item.PatientName)</span>
+                                            </div>
+                                            <span class="fw-semibold">@item.PatientName</span>
                                         </div>
-                                        <span class="fw-semibold">@item.PatientName</span>
-                                    </div>
-                                </td>
-                                <td>@item.IdentityNumber</td>
-                                <td>@item.MRN</td>
-                                <td>@item.HospitalName</td>
-                                <td>@item.DoctorName</td>
-                                <td>
-                                    <span class='badge @(item.Status == ReportStatus.Approved ? "bg-label-success" : item.Status == ReportStatus.Archived ? "bg-label-secondary" : "bg-label-warning")'>
-                                        @(item.Status == ReportStatus.PendingReview ? "Pending Review" : item.Status.ToString())
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => ViewPatientDetailsAsync(item)">
-                                        <i class="icon-base ti tabler-eye me-1"></i>View
-                                    </button>
-                                </td>
+                                    </td>
+                                    <td>@item.MRN</td>
+                                    <td>@item.Nric</td>
+                                    <td>@item.PassportNo</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => ViewPatientDetailsAsync(item)">
+                                            <i class="icon-base ti tabler-eye me-1"></i>View
+                                        </button>
+                                    </td>
+                                }
+                                else if (_isHospitalStaffDirectory)
+                                {
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar avatar-sm me-3">
+                                                <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(item.PatientName)</span>
+                                            </div>
+                                            <span class="fw-semibold">@item.PatientName</span>
+                                        </div>
+                                    </td>
+                                    <td>@item.MRN</td>
+                                    <td>@item.Nric</td>
+                                    <td>@item.PassportNo</td>
+                                    <td>@item.DoctorName</td>
+                                    <td>@(string.IsNullOrWhiteSpace(item.DoctorSpecialty) ? "—" : item.DoctorSpecialty)</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => ViewPatientDetailsAsync(item)">
+                                            <i class="icon-base ti tabler-eye me-1"></i>View
+                                        </button>
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar avatar-sm me-3">
+                                                <span class="avatar-initial rounded-circle bg-label-primary">@GetInitials(item.PatientName)</span>
+                                            </div>
+                                            <span class="fw-semibold">@item.PatientName</span>
+                                        </div>
+                                    </td>
+                                    <td>@item.IdentityNumber</td>
+                                    <td>@item.MRN</td>
+                                    <td>@item.HospitalName</td>
+                                    <td>@item.DoctorName</td>
+                                    <td>
+                                        <span class='badge @(item.Status == ReportStatus.Approved ? "bg-label-success" : item.Status == ReportStatus.Archived ? "bg-label-secondary" : "bg-label-warning")'>
+                                            @(item.Status == ReportStatus.PendingReview ? "Pending Review" : item.Status.ToString())
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => ViewPatientDetailsAsync(item)">
+                                            <i class="icon-base ti tabler-eye me-1"></i>View
+                                        </button>
+                                    </td>
+                                }
                             </tr>
                         }
                     }
@@ -293,6 +357,7 @@ else
     private bool _canAccess;
     private bool _hasWorkflowAccess = true;
     private bool _isDoctor;
+    private bool _isHospitalStaffDirectory;
     private string _scopeLabel = string.Empty;
     private string _searchTerm = string.Empty;
     private List<PatientDirectoryRow> _patients = new();
@@ -346,8 +411,11 @@ else
                 x.PatientName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 x.IdentityNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 x.MRN.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.Nric.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.PassportNo.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 x.HospitalName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 x.DoctorName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                x.DoctorSpecialty.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
                 x.ReferenceNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
@@ -373,10 +441,13 @@ else
         _userRole = user.Role;
         _hasWorkflowAccess = RoleAccess.CanAccessPatientWorkflow(user.Role, _workflowMode);
         _isDoctor = user.Role == UserRole.Doctor;
+        _isHospitalStaffDirectory = user.Role is UserRole.HeadNurse or UserRole.LabManager;
         _accessibleHospitalIds = CurrentUserService.GetAccessibleHospitalIds(user).ToList();
         _scopeLabel = _isDoctor
             ? "Patients from reports attributed to you"
-            : _accessibleHospitalIds.Count > 1 ? "Assigned hospitals" : "Hospital patients";
+            : _isHospitalStaffDirectory
+                ? "Patients from reports in your assigned hospitals"
+                : _accessibleHospitalIds.Count > 1 ? "Assigned hospitals" : "Hospital patients";
 
         await LoadPatientsAsync(user);
 
@@ -430,17 +501,20 @@ else
 
         if (user.Role == UserRole.Doctor)
         {
+            // Align with Reports doctor scope: attributed reports in any pipeline status (read-only in UI elsewhere).
             var email = user.Email?.Trim();
             query = query.Where(r =>
-                r.Status == ReportStatus.Approved &&
-                (
-                    (user.DoctorId.HasValue && r.DoctorId == user.DoctorId.Value) ||
-                    (!string.IsNullOrWhiteSpace(email) &&
-                     r.Doctor.Email != null &&
-                     r.Doctor.Email.Trim().ToLower() == email.ToLower()) ||
-                    r.CreatedByUserId == user.Id));
+                (user.DoctorId.HasValue && r.DoctorId == user.DoctorId.Value) ||
+                (!string.IsNullOrWhiteSpace(email) &&
+                 r.Doctor.Email != null &&
+                 r.Doctor.Email.Trim().ToLower() == email.ToLower()) ||
+                r.CreatedByUserId == user.Id);
         }
-        else if (user.Role is UserRole.HeadNurse or UserRole.LabManager or UserRole.LabAdmin)
+        else if (user.Role is UserRole.HeadNurse or UserRole.LabManager)
+        {
+            // Align with Reports: all pipeline statuses in accessible hospitals.
+        }
+        else if (user.Role == UserRole.LabAdmin)
         {
             query = query.Where(r => r.Status == ReportStatus.Approved);
         }
@@ -455,9 +529,12 @@ else
                 IdentityNumber = r.Patient.IdentityType == IdentityType.NRIC
                     ? (r.Patient.NRIC ?? "-")
                     : (r.Patient.PassportNo ?? "-"),
+                Nric = r.Patient.NRIC ?? "-",
+                PassportNo = r.Patient.PassportNo ?? "-",
                 MRN = r.Patient.MRN ?? "-",
                 HospitalName = r.Hospital.Name,
                 DoctorName = r.Doctor.Name,
+                DoctorSpecialty = r.Doctor.Specialty ?? "-",
                 ReferenceNumber = r.ReferenceNumber,
                 Status = r.Status
             })
@@ -523,9 +600,12 @@ else
         public int HospitalId { get; set; }
         public string PatientName { get; set; } = string.Empty;
         public string IdentityNumber { get; set; } = string.Empty;
+        public string Nric { get; set; } = "-";
+        public string PassportNo { get; set; } = "-";
         public string MRN { get; set; } = "-";
         public string HospitalName { get; set; } = string.Empty;
         public string DoctorName { get; set; } = string.Empty;
+        public string DoctorSpecialty { get; set; } = "-";
         public string ReferenceNumber { get; set; } = string.Empty;
         public ReportStatus Status { get; set; }
     }

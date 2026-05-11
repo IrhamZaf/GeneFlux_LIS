@@ -1,5 +1,5 @@
 @page "/administration/hospitals/{Id:int}"
-@attribute [Authorize(Roles = "SuperAdmin")]
+@attribute [Authorize(Roles = "SuperAdmin,LabAdmin,Admin")]
 @using LIS.Contracts.Administration
 @inject AdministrationService AdministrationService
 

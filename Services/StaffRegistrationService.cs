@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace LIS.Services;
 
@@ -16,19 +18,22 @@ public class StaffRegistrationService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly UserService _userService;
     private readonly AuditLogService _auditLogService;
+    private readonly EmailService _emailService;
 
     public StaffRegistrationService(
         IDbContextFactory<ApplicationDbContext> contextFactory,
         IDataProtectionProvider dataProtectionProvider,
         UserManager<ApplicationUser> userManager,
         UserService userService,
-        AuditLogService auditLogService)
+        AuditLogService auditLogService,
+        EmailService emailService)
     {
         _contextFactory = contextFactory;
         _dataProtectionProvider = dataProtectionProvider;
         _userManager = userManager;
         _userService = userService;
         _auditLogService = auditLogService;
+        _emailService = emailService;
     }
 
     public static bool IsAllowedSelfServiceRole(UserRole role) =>
@@ -146,16 +151,9 @@ public class StaffRegistrationService
                 d.Email.Trim().ToLower() == request.Email.Trim().ToLowerInvariant()))
             return (false, "A doctor with this email already exists.");
 
-        string plainPassword;
-        try
-        {
-            var protector = _dataProtectionProvider.CreateProtector(PasswordProtectorPurpose);
-            plainPassword = protector.Unprotect(request.ProtectedPassword);
-        }
-        catch
-        {
-            return (false, "Unable to restore the submitted password. Ask the user to register again.");
-        }
+        var plainPassword = await GenerateCompliantPasswordAsync();
+        if (plainPassword == null)
+            return (false, "Could not generate a compliant password. Try again or contact support.");
 
         Doctor? doctorEntity = null;
         if (request.RequestedRole == UserRole.Doctor)
@@ -225,7 +223,42 @@ public class StaffRegistrationService
             actor,
             metadata: new { request.Email, Role = request.RequestedRole.ToString(), request.HospitalId });
 
-        return (true, "Account created. The user can sign in with the password they chose at registration.");
+        await _emailService.SendStaffRegistrationApprovedCredentialsAsync(request.Email.Trim(), request.FullName.Trim(), plainPassword);
+
+        return (true, "Account created. The user has been emailed a sign-in link and temporary password.");
+    }
+
+    private async Task<string?> GenerateCompliantPasswordAsync()
+    {
+        const string pool = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*";
+        var tempUser = new ApplicationUser { UserName = "generator", Email = "generator@local.invalid" };
+
+        using var rng = RandomNumberGenerator.Create();
+        for (var attempt = 0; attempt < 48; attempt++)
+        {
+            var bytes = new byte[24];
+            rng.GetBytes(bytes);
+            var sb = new StringBuilder(18);
+            for (var i = 0; i < 18; i++)
+                sb.Append(pool[bytes[i % bytes.Length] % pool.Length]);
+
+            var candidate = sb.ToString();
+            var ok = true;
+            foreach (var validator in _userManager.PasswordValidators)
+            {
+                var r = await validator.ValidateAsync(_userManager, tempUser, candidate);
+                if (!r.Succeeded)
+                {
+                    ok = false;
+                    break;
+                }
+            }
+
+            if (ok)
+                return candidate;
+        }
+
+        return null;
     }
 
     public async Task<(bool Success, string Message)> RejectAsync(int requestId, string? reason, ApplicationUser actor)

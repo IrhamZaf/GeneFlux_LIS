@@ -94,7 +94,7 @@ else
                                     </td>
                                     <td class="text-end">
                                         <div class="d-flex justify-content-end gap-2">
-                                            <button type="button" class="btn btn-sm btn-label-primary" @onclick="() => OpenEditUserDialog(user)">Edit</button>
+                                            <button type="button" class="btn btn-sm btn-label-primary" @onclick="async () => await OpenEditUserDialog(user)">Edit</button>
                                             @if (user.IsActive)
                                             {
                                                 <button type="button" class="btn btn-sm btn-label-danger" @onclick="() => DeactivateUser(user)">Deactivate</button>
@@ -348,9 +348,9 @@ else
         _showUserDialog = true;
     }
 
-    private void OpenEditUserDialog(ApplicationUser user)
+    private async Task OpenEditUserDialog(ApplicationUser user)
     {
-        _editingUser = new ApplicationUser
+        _editingUser = await UserService.GetByIdAsync(user.Id) ?? new ApplicationUser
         {
             Id = user.Id,
             FullName = user.FullName,

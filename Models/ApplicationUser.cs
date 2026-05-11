@@ -13,6 +13,9 @@ public class ApplicationUser : IdentityUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    public string? MobileNumber { get; set; }
+    public string? OfficeNumber { get; set; }
+
     // Navigation: if this user is a doctor, link to Doctor record
     public int? DoctorId { get; set; }
     public Doctor? Doctor { get; set; }
